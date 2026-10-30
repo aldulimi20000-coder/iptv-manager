@@ -156,6 +156,7 @@ def xtream_api():
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
+    # جلب الأقسام والقنوات والأفلام والمسلسلات من المصادر الأصلية
     if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
         for source in XTREAM_SOURCES:
             try:
@@ -204,12 +205,34 @@ def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     
-    # تحويل مباشر (Redirect) لتفادي قيود التثاقل والتقطيع على Vercel وتشغيل القناة فوراً
+    # توجيه الزبون تلقائياً وبشكل مباشر إلى رابط الـ Xtream الأصلي (Redirect 302) لتجنب قيود Vercel
     if XTREAM_SOURCES:
-        target_url = f"{XTREAM_SOURCES[0]['dns']}/live/{XTREAM_SOURCES[0]['user']}/{XTREAM_SOURCES[0]['pass']}/{stream_id}.ts"
+        # اختيار أول مصدر جاهز وشغال لتحويل البث إليه مباشرة
+        source = XTREAM_SOURCES[0]
+        target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
         return redirect(target_url, code=302)
         
     return "All sources offline", 503
+
+@app.route('/movie/<username>/<password>/<int:movie_id>.<ext>')
+def movie_proxy(username, password, movie_id, ext):
+    if username not in USERS or USERS[username]['password'] != password:
+        return "Unauthorized", 401
+    if XTREAM_SOURCES:
+        source = XTREAM_SOURCES[0]
+        target_url = f"{source['dns']}/movie/{source['user']}/{source['pass']}/{movie_id}.{ext}"
+        return redirect(target_url, code=302)
+    return "Offline", 503
+
+@app.route('/series/<username>/<password>/<int:series_id>.<ext>')
+def series_proxy(username, password, series_id, ext):
+    if username not in USERS or USERS[username]['password'] != password:
+        return "Unauthorized", 401
+    if XTREAM_SOURCES:
+        source = XTREAM_SOURCES[0]
+        target_url = f"{source['dns']}/series/{source['user']}/{source['pass']}/{series_id}.{ext}"
+        return redirect(target_url, code=302)
+    return "Offline", 503
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
