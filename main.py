@@ -25,7 +25,6 @@ def load_sources():
 
 XTREAM_SOURCES = load_sources()
 
-# جدول المستخدمين والاشتراكات (يمكنك إدارتهم مباشرة عبر اللوحة)
 USERS = {
     "bashar": {"password": "123", "max_connections": 2, "expiry": "2027-12-31"}
 }
@@ -37,60 +36,71 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <title>لوحة تحكم مدير IPTV</title>
     <style>
-        body { background: #0f172a; color: #f8fafc; font-family: Tahoma, sans-serif; margin: 0; padding: 20px; }
+        body { background: #0f172a; color: #f8fafc; font-family: Tahoma, sans-serif; margin: 0; padding: 15px; }
         .container { max-width: 900px; margin: auto; background: #1e293b; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h1, h2 { color: #38bdf8; text-align: center; }
-        .stats { display: flex; justify-content: space-around; background: #334155; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; border-bottom: 1px solid #475569; text-align: center; }
+        .stats { display: flex; justify-content: space-around; background: #334155; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; }
+        .url-box { background: #0284c7; padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .url-box input { width: 100%; padding: 8px; background: #0f172a; color: #38bdf8; border: none; border-radius: 5px; text-align: center; font-size: 15px; font-weight: bold; margin-top: 5px; box-sizing: border-box; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+        th, td { padding: 10px; border-bottom: 1px solid #475569; text-align: center; word-break: break-all; }
         th { background: #0284c7; color: #fff; }
         form { background: #334155; padding: 15px; border-radius: 8px; margin-top: 20px; }
         input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; border-radius: 5px; border: none; }
-        input { background: #1e293b; color: #fff; border: 1px solid #475569; }
+        input[type="text"], input[type="password"], input[type="number"], input[type="date"] { background: #1e293b; color: #fff; border: 1px solid #475569; }
         button { background: #22c55e; color: #fff; font-weight: bold; cursor: pointer; }
         button:hover { background: #16a34a; }
-        .btn-danger { background: #ef4444; }
-        .btn-danger:hover { background: #dc2626; }
+        .btn-danger { background: #ef4444; width: auto; padding: 5px 10px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>لوحة تحكم وإدارة اشتراكات IPTV</h1>
+        
         <div class="stats">
-            <div>📡 مصادر Xtream المحملة: <strong>{{ sources_count }}</strong></div>
-            <div>👥 عدد المستخدمين: <strong>{{ users|length }}</strong></div>
+            <div>📡 مصادر Xtream: <strong>{{ sources_count }}</strong></div>
+            <div>👥 المستخدمين: <strong>{{ users|length }}</strong></div>
         </div>
 
-        <h2>إضافة مستخدم جديد أو تعديل اشتراك</h2>
+        <div class="url-box">
+            <span>🌐 رابط السيرفر الأساسي (Server URL) لإعطائه للزبائن:</span>
+            <input type="text" value="{{ host_url }}" readonly onclick="this.select();">
+        </div>
+
+        <h2>إضافة مستخدم جديد</h2>
         <form method="POST" action="/add_user">
-            <input type="text" name="username" placeholder="اسم المستخدم" required>
-            <input type="text" name="password" placeholder="كلمة المرور" required>
-            <input type="number" name="max_connections" placeholder="عدد الاتصالات المسموحة (مثال: 1)" value="1" required>
-            <label style="display:block; text-align:right; margin-top:5px;">تاريخ انتهاء الاشتراك:</label>
+            <input type="text" name="username" placeholder="اسم المستخدم (مثال: client1)" required>
+            <input type="text" name="password" placeholder="كلمة المرور (مثال: 456)" required>
+            <input type="number" name="max_connections" placeholder="عدد الاتصالات (مثال: 1)" value="1" required>
+            <label style="display:block; text-align:right; margin-top:5px; font-size:13px;">تاريخ انتهاء الاشتراك:</label>
             <input type="date" name="expiry" required>
             <button type="submit">حفظ / إضافة المستخدم</button>
         </form>
 
-        <h2>قائمة المستخدمين الحاليين</h2>
+        <h2>قائمة المستخدمين وبياناتهم للزبائن</h2>
         <table>
             <tr>
-                <th>اسم المستخدم</th>
+                <th>المستخدم</th>
                 <th>كلمة المرور</th>
-                <th>الاتصالات</th>
-                <th>تاريخ الانتهاء</th>
+                <th>اتصالات</th>
+                <th>الانتهاء</th>
                 <th>الإجراء</th>
             </tr>
             {% for uname, data in users.items() %}
             <tr>
-                <td>{{ uname }}</td>
+                <td><strong>{{ uname }}</strong></td>
                 <td>{{ data.password }}</td>
                 <td>{{ data.max_connections }}</td>
                 <td>{{ data.expiry }}</td>
                 <td>
+                    {% if uname != 'bashar' %}
                     <form method="POST" action="/delete_user" style="margin:0; padding:0; background:none;">
                         <input type="hidden" name="username" value="{{ uname }}">
-                        <button type="submit" class="btn-danger" style="width: auto; padding: 5px 10px;">حذف</button>
+                        <button type="submit" class="btn-danger">حذف</button>
                     </form>
+                    {% else %}
+                    <span style="color:#94a3b8; font-size:11px;">المدير</span>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -102,7 +112,8 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_TEMPLATE, sources_count=len(XTREAM_SOURCES), users=USERS)
+    host_url = request.host_url.rstrip('/')
+    return render_template_string(HTML_TEMPLATE, sources_count=len(XTREAM_SOURCES), users=USERS, host_url=host_url)
 
 @app.route('/add_user', methods=['POST'])
 def add_user():
@@ -134,7 +145,6 @@ def xtream_api():
     if username not in USERS or USERS[username]['password'] != password:
         return jsonify({"user_info": {"auth": 0, "status": "Disabled"}})
     
-    # التحقق من تاريخ انتهاء الاشتراك
     expiry_str = USERS[username].get('expiry', '2099-12-31')
     try:
         expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d')
