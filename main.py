@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from flask import Flask, redirect, request, jsonify, render_template_string
 import requests
+import random
 
 app = Flask(__name__)
 
@@ -156,16 +157,17 @@ def xtream_api():
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-    # جلب الأقسام والقنوات والأفلام والمسلسلات من المصادر الأصلية
+    # جلب البيانات الذكي عبر تجربة عدة مصادر عشوائية من الـ 59 مصدراً لمنع الفشل
     if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
-        for source in XTREAM_SOURCES:
+        sample_sources = random.sample(XTREAM_SOURCES, min(len(XTREAM_SOURCES), 10)) if XTREAM_SOURCES else []
+        for source in sample_sources:
             try:
                 target_url = f"{source['dns']}/player_api.php?username={source['user']}&password={source['pass']}&action={action}"
                 for key, val in request.args.items():
                     if key not in ['username', 'password', 'action']:
                         target_url += f"&{key}={val}"
                 
-                r = requests.get(target_url, headers=headers, timeout=5)
+                r = requests.get(target_url, headers=headers, timeout=4)
                 if r.status_code == 200:
                     data = r.json()
                     if data:
@@ -205,7 +207,9 @@ def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     if XTREAM_SOURCES:
-        source = XTREAM_SOURCES[0]
+        # نظام تدوير ذكي (Load Balancing) لتوزيع القنوات على الـ 59 حساباً على http://sxstreem.net
+        idx = abs(hash(str(stream_id))) % len(XTREAM_SOURCES)
+        source = XTREAM_SOURCES[idx]
         target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
         return redirect(target_url, code=302)
     return "All sources offline", 503
@@ -215,7 +219,8 @@ def movie_proxy(username, password, movie_id, ext):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     if XTREAM_SOURCES:
-        source = XTREAM_SOURCES[0]
+        idx = abs(hash(str(movie_id))) % len(XTREAM_SOURCES)
+        source = XTREAM_SOURCES[idx]
         target_url = f"{source['dns']}/movie/{source['user']}/{source['pass']}/{movie_id}.{ext}"
         return redirect(target_url, code=302)
     return "Offline", 503
@@ -225,7 +230,8 @@ def series_proxy(username, password, series_id, ext):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     if XTREAM_SOURCES:
-        source = XTREAM_SOURCES[0]
+        idx = abs(hash(str(series_id))) % len(XTREAM_SOURCES)
+        source = XTREAM_SOURCES[idx]
         target_url = f"{source['dns']}/series/{source['user']}/{source['pass']}/{series_id}.{ext}"
         return redirect(target_url, code=302)
     return "Offline", 503
