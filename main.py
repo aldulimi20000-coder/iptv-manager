@@ -3,11 +3,10 @@ import time
 from datetime import datetime
 from flask import Flask, redirect, request, jsonify, render_template_string
 import requests
-import concurrent.futures
 
 app = Flask(__name__)
 
-# ذاكرة مؤقتة لدمج محتوى الـ 59 حساباً بالكامل دون فلترة
+# ذاكرة مؤقتة لدمج محتوى الـ 59 حساباً بالكامل
 MASTER_CACHE = {
     "sources": [],
     "live_streams": [],
@@ -41,7 +40,6 @@ def fetch_all_content():
     global MASTER_CACHE
     current_time = time.time()
     
-    # سحب ودمج محتوى الـ 59 حساباً بالكامل
     if not MASTER_CACHE["sources"] or (current_time - MASTER_CACHE["last_updated"] > 900):
         all_sources = load_sources()
         MASTER_CACHE["sources"] = all_sources
@@ -51,11 +49,9 @@ def fetch_all_content():
         stream_map = {}
         headers = {'User-Agent': 'Mozilla/5.0'}
         
-        # سحب البيانات من جميع الحسابات لضمان شمولية الأفلام والمسلسلات والقنوات
         for idx, src in enumerate(all_sources):
             base_url = f"{src['dns']}/player_api.php?username={src['user']}&password={src['pass']}"
             try:
-                # سحب القنوات المباشرة
                 r_live = requests.get(f"{base_url}&action=get_live_streams", headers=headers, timeout=2)
                 if r_live.status_code == 200:
                     streams = r_live.json()
@@ -68,7 +64,6 @@ def fetch_all_content():
                                 stream_map[unique_id] = {"source": src, "orig_id": orig_id}
                                 live_list.append(s)
                 
-                # سحب الأفلام (VOD)
                 r_vod = requests.get(f"{base_url}&action=get_vod_streams", headers=headers, timeout=2)
                 if r_vod.status_code == 200:
                     vods = r_vod.json()
@@ -81,7 +76,6 @@ def fetch_all_content():
                                 stream_map[unique_id] = {"source": src, "orig_id": orig_id}
                                 vod_list.append(v)
 
-                # سحب المسلسلات
                 r_ser = requests.get(f"{base_url}&action=get_series", headers=headers, timeout=2)
                 if r_ser.status_code == 200:
                     sers = r_ser.json()
@@ -96,7 +90,6 @@ def fetch_all_content():
             except:
                 continue
 
-        # جلب التصنيفات من أول حساب
         if all_sources:
             try:
                 src = all_sources[0]
@@ -126,7 +119,7 @@ HTML_TEMPLATE = """
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لوحة تحكم مدير IPTV</title>
+    <title>لوحة تحكم وإدارة اشتراكات IPTV الشاملة</title>
     <style>
         body { background: #0f172a; color: #f8fafc; font-family: Tahoma, sans-serif; margin: 0; padding: 15px; }
         .container { max-width: 900px; margin: auto; background: #1e293b; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
@@ -157,9 +150,220 @@ HTML_TEMPLATE = """
         </div>
 
         <div class="url-box">
-            <span>🌐 رابط السيرفر الأساسي (Server URL) للزبائن:</span>
+            <span>🌐 رابط السيرفر الأساسي (Server URL):</span>
             <input type="text" value="{{ host_url }}" readonly onclick="this.select();">
         </div>
 
         <h2>إضافة مستخدم جديد</h2>
-        <form method="POST" action="/add_user
+        <form method="POST" action="/add_user">
+            <input type="text" name="username" placeholder="اسم المستخدم (مثال: client1)" required>
+            <input type="text" name="password" placeholder="كلمة المرور (مثال: 456)" required>
+            <input type="number" name="max_connections" placeholder="عدد الاتصالات (مثال: 1)" value="1" required>
+            <label style="display:block; text-align:right; margin-top:5px; font-size:13px;">تاريخ انتهاء الاشتراك:</label>
+            <input type="date" name="expiry" required>
+            <button type="submit">حفظ / إضافة المستخدم</button>
+        </form>
+
+        <h2>قائمة المستخدمين وبياناتهم للزبائن</h2>
+        <table>
+            <tr>
+                <th>المستخدم</th>
+                <th>كلمة المرور</th>
+                <th>اتصالات</th>
+                <th>الانتهاء</th>
+                <th>الإجراء</th>
+            </tr>
+            {% for uname, data in users.items() %}
+            <tr>
+                <td><strong>{{ uname }}</strong></td>
+                <td>{{ data.password }}</td>
+                <td>{{ data.max_connections }}</td>
+                <td>{{ data.expiry }}</td>
+                <td>
+                    {% if uname != 'bashar' %}
+                    <form method="POST" action="/delete_user" style="margin:0; padding:0; background:none;">
+                        <input type="hidden" name="username" value="{{ uname }}">
+                        <button type="submit" class="btn-danger">حذف</button>
+                    </form>
+                    {% else %}
+                    <span style="color:#94a3b8; font-size:11px;">المدير</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>
+"""
+
+@app.route('/')
+def home():
+    fetch_all_content()
+    # تثبيت الرابط ليظهر http://sxstreem.net في اللوحة
+    host_url = "http://sxstreem.net"
+    return render_template_string(
+        HTML_TEMPLATE, 
+        sources_count=len(MASTER_CACHE["sources"]),
+        live_count=len(MASTER_CACHE["live_streams"]),
+        vod_count=len(MASTER_CACHE["vod_streams"]),
+        series_count=len(MASTER_CACHE["series_streams"]),
+        users=USERS, 
+        host_url=host_url
+    )
+
+@app.route('/add_user', methods=['POST'])
+def add_user():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    max_conn = int(request.form.get('max_connections', 1))
+    expiry = request.form.get('expiry')
+    if username and password:
+        USERS[username] = {
+            "password": password,
+            "max_connections": max_conn,
+            "expiry": expiry
+        }
+    return redirect('/')
+
+@app.route('/delete_user', methods=['POST'])
+def delete_user():
+    username = request.form.get('username')
+    if username in USERS and username != "bashar":
+        del USERS[username]
+    return redirect('/')
+
+@app.route('/player_api.php')
+def xtream_api():
+    fetch_all_content()
+    username = request.args.get('username')
+    password = request.args.get('password')
+    action = request.args.get('action')
+    
+    if username not in USERS or USERS[username]['password'] != password:
+        return jsonify({"user_info": {"auth": 0, "status": "Disabled"}})
+    
+    expiry_str = USERS[username].get('expiry', '2099-12-31')
+    try:
+        expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d')
+        if datetime.now() > expiry_date:
+            return jsonify({"user_info": {"auth": 0, "status": "Expired", "message": "Subscription Expired"}})
+        exp_timestamp = int(expiry_date.timestamp())
+    except:
+        exp_timestamp = int(datetime.now().timestamp()) + 31536000
+    
+    if action == 'get_live_categories':
+        return jsonify(MASTER_CACHE["live_categories"])
+    elif action == 'get_live_streams':
+        return jsonify(MASTER_CACHE["live_streams"])
+    elif action == 'get_vod_categories':
+        return jsonify(MASTER_CACHE["vod_categories"])
+    elif action == 'get_vod_streams':
+        return jsonify(MASTER_CACHE["vod_streams"])
+    elif action == 'get_series_categories':
+        return jsonify(MASTER_CACHE["series_categories"])
+    elif action == 'get_series':
+        return jsonify(MASTER_CACHE["series_streams"])
+    elif action in ['get_series_info', 'get_vod_info']:
+        stream_id = request.args.get('series_id') or request.args.get('vod_id')
+        mapping = MASTER_CACHE["stream_to_source"].get(str(stream_id))
+        if mapping:
+            src = mapping["source"]
+            orig_id = mapping["orig_id"]
+            target_url = f"{src['dns']}/player_api.php?username={src['user']}&password={src['pass']}&action={action}&{'series_id' if 'series_id' in request.args else 'vod_id'}={orig_id}"
+            try:
+                r = requests.get(target_url, timeout=3)
+                if r.status_code == 200:
+                    return jsonify(r.json())
+            except:
+                pass
+        return jsonify({})
+
+    return jsonify({
+        "user_info": {
+            "username": username,
+            "password": password,
+            "message": "",
+            "auth": 1,
+            "status": "Active",
+            "exp_date": str(exp_timestamp),
+            "is_trial": "0",
+            "active_cons": "1",
+            "max_connections": str(USERS[username].get('max_connections', 1)),
+            "allowed_output_formats": ["m3u8", "ts", "rtmp"]
+        },
+        "server_info": {
+            "url": "sxstreem.net",
+            "port": "80",
+            "https_port": "443",
+            "server_protocol": "http",
+            "rtmp_port": "8080",
+            "timezone": "UTC",
+            "timestamp_now": int(datetime.now().timestamp()),
+            "time_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "process": True
+        }
+    })
+
+@app.route('/live/<username>/<password>/<stream_id>.ts')
+def stream_proxy(username, password, stream_id):
+    if username not in USERS or USERS[username]['password'] != password:
+        return "Unauthorized", 401
+    
+    mapping = MASTER_CACHE["stream_to_source"].get(str(stream_id))
+    if mapping:
+        src = mapping["source"]
+        orig_id = mapping["orig_id"]
+        target_url = f"{src['dns']}/live/{src['user']}/{src['pass']}/{orig_id}.ts"
+        return redirect(target_url, code=302)
+        
+    sources = MASTER_CACHE["sources"]
+    if sources:
+        src = sources[0]
+        return redirect(f"{src['dns']}/live/{src['user']}/{src['pass']}/{stream_id}.ts", code=302)
+        
+    return "All sources offline", 503
+
+@app.route('/movie/<username>/<password>/<movie_id>.<ext>')
+def movie_proxy(username, password, movie_id, ext):
+    if username not in USERS or USERS[username]['password'] != password:
+        return "Unauthorized", 401
+    
+    mapping = MASTER_CACHE["stream_to_source"].get(str(movie_id))
+    if mapping:
+        src = mapping["source"]
+        orig_id = mapping["orig_id"]
+        target_url = f"{src['dns']}/movie/{src['user']}/{src['pass']}/{orig_id}.{ext}"
+        return redirect(target_url, code=302)
+        
+    sources = MASTER_CACHE["sources"]
+    if sources:
+        src = sources[0]
+        return redirect(f"{src['dns']}/movie/{src['user']}/{src['pass']}/{movie_id}.{ext}", code=302)
+        
+    return "Offline", 503
+
+@app.route('/series/<username>/<password>/<path:path_info>')
+def series_proxy(username, password, path_info):
+    if username not in USERS or USERS[username]['password'] != password:
+        return "Unauthorized", 401
+        
+    parts = path_info.split('/')
+    series_id = parts[0].split('.')[0] if parts else ""
+    
+    mapping = MASTER_CACHE["stream_to_source"].get(str(series_id))
+    if mapping:
+        src = mapping["source"]
+        orig_path = path_info.replace(str(series_id), str(mapping["orig_id"]), 1)
+        target_url = f"{src['dns']}/series/{src['user']}/{src['pass']}/{orig_path}"
+        return redirect(target_url, code=302)
+        
+    sources = MASTER_CACHE["sources"]
+    if sources:
+        src = sources[0]
+        return redirect(f"{src['dns']}/series/{src['user']}/{src['pass']}/{path_info}", code=302)
+        
+    return "Offline", 503
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
