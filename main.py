@@ -25,7 +25,8 @@ def load_sources():
 XTREAM_SOURCES = load_sources()
 
 USERS = {
-    "bashar": {"password": "123", "max_connections": 2, "expiry": "2027-12-31"}
+    "bashar": {"password": "123", "max_connections": 2, "expiry": "2027-12-31"},
+    "12345": {"password": "12345", "max_connections": 1, "expiry": "2026-11-08"}
 }
 
 HTML_TEMPLATE = """
@@ -152,11 +153,12 @@ def xtream_api():
     except:
         pass
     
+    # جلب سريع من أول مصدر متاح بمهلة قصيرة جداً لضمان عدم حدوث Timeout
     if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
-        for source in XTREAM_SOURCES:
+        for source in XTREAM_SOURCES[:5]: # الفحص السريع لأول 5 مصادر لتجنب تجاوز الوقت
             try:
                 target_url = f"{source['dns']}/player_api.php?username={source['user']}&password={source['pass']}&action={action}"
-                r = requests.get(target_url, timeout=4)
+                r = requests.get(target_url, timeout=2)
                 if r.status_code == 200:
                     try:
                         return jsonify(r.json())
