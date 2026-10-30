@@ -156,7 +156,6 @@ def xtream_api():
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-    # جلب الأقسام والقنوات والأفلام والمسلسلات الحقيقية مع ترويسة متصفح لتجاوز الحظر
     if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
         for source in XTREAM_SOURCES:
             try:
@@ -168,7 +167,7 @@ def xtream_api():
                 r = requests.get(target_url, headers=headers, timeout=4)
                 if r.status_code == 200:
                     data = r.json()
-                    if data:  # التأكد أن النتيجة ليست فارغة
+                    if data:
                         return jsonify(data)
             except:
                 continue
@@ -205,16 +204,11 @@ def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     
-    headers = {'User-Agent': 'VLC/3.0.16'}
-    for source in XTREAM_SOURCES:
-        try:
-            target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
-            r = requests.get(target_url, headers=headers, stream=True, timeout=3)
-            if r.status_code == 200:
-                return Response(r.iter_content(chunk_size=1024), content_type=r.headers.get('Content-Type'))
-        except:
-            continue
-            
+    # تحويل مباشر (Redirect) لتفادي قيود التثاقل والتقطيع على Vercel وتشغيل القناة فوراً
+    if XTREAM_SOURCES:
+        target_url = f"{XTREAM_SOURCES[0]['dns']}/live/{XTREAM_SOURCES[0]['user']}/{XTREAM_SOURCES[0]['pass']}/{stream_id}.ts"
+        return redirect(target_url, code=302)
+        
     return "All sources offline", 503
 
 if __name__ == '__main__':
