@@ -153,7 +153,6 @@ def xtream_api():
     except:
         pass
     
-    # محاولة جلب الأقسام والقنوات الحقيقية مع نظام احتياطي يمنع فشل التطبيق نهائياً
     if action == 'get_live_categories':
         return jsonify([{"category_id": "1", "category_name": "باقات الـ VIP والقنوات الرياضية"}])
     
@@ -170,13 +169,30 @@ def xtream_api():
             })
         return jsonify(streams)
 
+    # الاستجابة الأساسية لتسجيل الدخول متضمنة server_info لتجنب طرد التطبيق
     return jsonify({
         "user_info": {
             "username": username,
-            "status": "Active",
-            "max_connections": USERS[username].get('max_connections', 1),
+            "password": password,
+            "message": "",
             "auth": 1,
-            "exp_date": expiry_str
+            "status": "Active",
+            "exp_date": expiry_str,
+            "is_trial": "0",
+            "active_cons": "1",
+            "max_connections": str(USERS[username].get('max_connections', 1)),
+            "allowed_output_formats": ["m3u8", "ts", "rtmp"]
+        },
+        "server_info": {
+            "url": request.host,
+            "port": "443",
+            "https_port": "443",
+            "server_protocol": "https",
+            "rtmp_port": "8080",
+            "timezone": "UTC",
+            "timestamp_now": int(datetime.now().timestamp()),
+            "time_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "process": True
         }
     })
 
@@ -185,7 +201,6 @@ def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     
-    # توجيه البث المباشر لأول مصدر متاح
     for source in XTREAM_SOURCES:
         try:
             target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
