@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from flask import Flask, redirect, request, jsonify, render_template_string, Response
+from flask import Flask, redirect, request, jsonify, render_template_string
 import requests
 
 app = Flask(__name__)
@@ -165,7 +165,7 @@ def xtream_api():
                     if key not in ['username', 'password', 'action']:
                         target_url += f"&{key}={val}"
                 
-                r = requests.get(target_url, headers=headers, timeout=4)
+                r = requests.get(target_url, headers=headers, timeout=5)
                 if r.status_code == 200:
                     data = r.json()
                     if data:
@@ -204,14 +204,10 @@ def xtream_api():
 def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
-    
-    # توجيه الزبون تلقائياً وبشكل مباشر إلى رابط الـ Xtream الأصلي (Redirect 302) لتجنب قيود Vercel
     if XTREAM_SOURCES:
-        # اختيار أول مصدر جاهز وشغال لتحويل البث إليه مباشرة
         source = XTREAM_SOURCES[0]
         target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
         return redirect(target_url, code=302)
-        
     return "All sources offline", 503
 
 @app.route('/movie/<username>/<password>/<int:movie_id>.<ext>')
