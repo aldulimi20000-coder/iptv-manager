@@ -150,26 +150,31 @@ def xtream_api():
         expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d')
         if datetime.now() > expiry_date:
             return jsonify({"user_info": {"auth": 0, "status": "Expired", "message": "Subscription Expired"}})
+        # تحويل التاريخ إلى Unix Timestamp لتجنب مشكلة 1970 في التطبيق
+        exp_timestamp = int(expiry_date.timestamp())
     except:
-        pass
+        exp_timestamp = int(datetime.now().timestamp()) + 31536000
     
-    if action == 'get_live_categories':
-        return jsonify([{"category_id": "1", "category_name": "باقات الـ VIP والقنوات الرياضية"}])
-    
-    if action == 'get_live_streams':
-        streams = []
-        for i, source in enumerate(XTREAM_SOURCES[:10]):
-            streams.append({
-                "num": i + 1,
-                "name": f"VIP Channel {i + 1}",
-                "stream_type": "live",
-                "stream_id": 1000 + i,
-                "stream_icon": "",
-                "category_id": "1"
-            })
-        return jsonify(streams)
+    # سحب وعرض الأقسام والقنوات والأفلام والمسلسلات الحقيقية من المصادر الخارجية تلقائياً
+    if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
+        for source in XTREAM_SOURCES:
+            try:
+                target_url = f"{source['dns']}/player_api.php?username={source['user']}&password={source['pass']}&action={action}"
+                for key, val in request.args.items():
+                    if key not in ['username', 'password', 'action']:
+                        target_url += f"&{key}={val}"
+                
+                r = requests.get(target_url, timeout=5)
+                if r.status_code == 200:
+                    try:
+                        return jsonify(r.json())
+                    except:
+                        return r.text, r.status_code
+            except:
+                continue
+        return jsonify([])
 
-    # الاستجابة الأساسية لتسجيل الدخول متضمنة server_info لتجنب طرد التطبيق
+    # بيانات تسجيل الدخول المحدثة بالكامل مع التاريخ الصحيح
     return jsonify({
         "user_info": {
             "username": username,
@@ -177,7 +182,7 @@ def xtream_api():
             "message": "",
             "auth": 1,
             "status": "Active",
-            "exp_date": expiry_str,
+            "exp_date": str(exp_timestamp),
             "is_trial": "0",
             "active_cons": "1",
             "max_connections": str(USERS[username].get('max_connections', 1)),
