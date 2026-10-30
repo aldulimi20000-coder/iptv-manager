@@ -7,11 +7,17 @@ import concurrent.futures
 
 app = Flask(__name__)
 
-# تخزين مؤقت لحالة المصادر لتفادي إعادة الفحص البطيء مع كل طلب
-CACHE = {
+# ذاكرة تخزين مؤقتة للمحتوى المجمع من كافة الحسابات النشطة
+AGGREGATE_CACHE = {
     "sources": [],
-    "last_checked": 0,
-    "active_index": 0
+    "live_streams": [],
+    "vod_streams": [],
+    "series_streams": [],
+    "live_categories": [],
+    "vod_categories": [],
+    "series_categories": [],
+    "stream_to_source": {}, # ربط كل قناة/فيلم بمصدره الأصلي بدقة
+    "last_updated": 0
 }
 
 def load_sources():
@@ -43,22 +49,101 @@ def test_source(source):
         pass
     return None
 
-def get_active_sources(force_refresh=False):
-    global CACHE
+def refresh_master_catalog():
+    global AGGREGATE_CACHE
     current_time = time.time()
-    # إعادة الفحص التلقائي كل 10 دقائق لتحديث الحسابات التي عادت للعمل أو ماتت
-    if force_refresh or not CACHE["sources"] or (current_time - CACHE["last_checked"] > 600):
+    
+    # تحديث وفحص المصادر وجمع المحتوى كل 15 دقيقة أو عند بدء التشغيل
+    if not AGGREGATE_CACHE["sources"] or (current_time - AGGREGATE_CACHE["last_updated"] > 900):
         all_sources = load_sources()
-        working = []
+        working_sources = []
+        
+        # فحص الحسابات بالتوازي لاستخراج الشغالة فقط
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
             results = executor.map(test_source, all_sources)
             for res in results:
                 if res:
-                    working.append(res)
+                    working_sources.append(res)
         
-        CACHE["sources"] = working if working else all_sources
-        CACHE["last_checked"] = current_time
-    return CACHE["sources"]
+        if not working_sources:
+            working_sources = all_sources # احتياطي
+            
+        AGGREGATE_CACHE["sources"] = working_sources
+        
+        # تجميع شامل لجميع القنوات والأفلام والمسلسلات من كافة الحسابات النشطة
+        live_list, vod_list, series_list = [], [], []
+        live_cat, vod_cat, series_cat = [], [], []
+        stream_map = {}
+        
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        
+        for idx, src in enumerate(working_sources):
+            base_url = f"{src['dns']}/player_api.php?username={src['user']}&password={src['pass']}"
+            try:
+                # جلب القنوات المباشرة
+                r_live = requests.get(f"{base_url}&action=get_live_streams", headers=headers, timeout=3)
+                if r_live.status_code == 200:
+                    streams = r_live.json()
+                    if isinstance(streams, list):
+                        for s in streams:
+                            orig_id = s.get("stream_id")
+                            if orig_id:
+                                unique_id = f"L_{idx}_{orig_id}"
+                                s["stream_id"] = unique_id
+                                stream_map[unique_id] = {"source": src, "orig_id": orig_id, "type": "live"}
+                                live_list.append(s)
+                
+                # جلب الأفلام (VOD)
+                r_vod = requests.get(f"{base_url}&action=get_vod_streams", headers=headers, timeout=3)
+                if r_vod.status_code == 200:
+                    vods = r_vod.json()
+                    if isinstance(vods, list):
+                        for v in vods:
+                            orig_id = v.get("stream_id") or v.get("vod_id")
+                            if orig_id:
+                                unique_id = f"V_{idx}_{orig_id}"
+                                v["stream_id"] = unique_id
+                                stream_map[unique_id] = {"source": src, "orig_id": orig_id, "type": "vod"}
+                                vod_list.append(v)
+
+                # جلب المسلسلات
+                r_ser = requests.get(f"{base_url}&action=get_series", headers=headers, timeout=3)
+                if r_ser.status_code == 200:
+                    sers = r_ser.json()
+                    if isinstance(sers, list):
+                        for sr in sers:
+                            orig_id = sr.get("series_id")
+                            if orig_id:
+                                unique_id = f"S_{idx}_{orig_id}"
+                                sr["series_id"] = unique_id
+                                stream_map[unique_id] = {"source": src, "orig_id": orig_id, "type": "series"}
+                                series_list.append(sr)
+            except:
+                continue
+                
+            # يكفينا سحب البيانات من أول 5 حسابات نشطة لتعبئة المكتبة بالكامل وتجنب التخمة، مع بقاء البقية كاحتياط
+            if len(live_list) > 2000:
+                break
+
+        # جلب التصنيفات من أول مصدر نشط
+        if working_sources:
+            try:
+                src = working_sources[0]
+                b_url = f"{src['dns']}/player_api.php?username={src['user']}&password={src['pass']}"
+                live_cat = requests.get(f"{b_url}&action=get_live_categories", headers=headers, timeout=3).json()
+                vod_cat = requests.get(f"{b_url}&action=get_vod_categories", headers=headers, timeout=3).json()
+                series_cat = requests.get(f"{b_url}&action=get_series_categories", headers=headers, timeout=3).json()
+            except:
+                pass
+
+        AGGREGATE_CACHE["live_streams"] = live_list
+        AGGREGATE_CACHE["vod_streams"] = vod_list
+        AGGREGATE_CACHE["series_streams"] = series_list
+        AGGREGATE_CACHE["live_categories"] = live_cat if isinstance(live_cat, list) else []
+        AGGREGATE_CACHE["vod_categories"] = vod_cat if isinstance(vod_cat, list) else []
+        AGGREGATE_CACHE["series_categories"] = series_cat if isinstance(series_cat, list) else []
+        AGGREGATE_CACHE["stream_to_source"] = stream_map
+        AGGREGATE_CACHE["last_updated"] = current_time
 
 USERS = {
     "bashar": {"password": "123", "max_connections": 2, "expiry": "2027-12-31"},
@@ -75,7 +160,7 @@ HTML_TEMPLATE = """
         body { background: #0f172a; color: #f8fafc; font-family: Tahoma, sans-serif; margin: 0; padding: 15px; }
         .container { max-width: 900px; margin: auto; background: #1e293b; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h1, h2 { color: #38bdf8; text-align: center; }
-        .stats { display: flex; justify-content: space-around; background: #334155; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; }
+        .stats { display: flex; justify-content: space-around; background: #334155; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 13px; flex-wrap: wrap; gap: 5px; }
         .url-box { background: #0284c7; padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
         .url-box input { width: 100%; padding: 8px; background: #0f172a; color: #38bdf8; border: none; border-radius: 5px; text-align: center; font-size: 15px; font-weight: bold; margin-top: 5px; box-sizing: border-box; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
@@ -91,15 +176,17 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>لوحة تحكم وإدارة اشتراكات IPTV</h1>
+        <h1>لوحة تحكم وإدارة اشتراكات IPTV الشاملة</h1>
         
         <div class="stats">
-            <div>⚡ الحسابات النشطة (تعمل بالذات): <strong>{{ sources_count }}</strong></div>
+            <div>📡 الحسابات النشطة: <strong>{{ sources_count }}</strong></div>
+            <div>📺 القنوات المباشرة: <strong>{{ live_count }}</strong></div>
+            <div>🎬 الأفلام والمسلسلات: <strong>{{ vod_count + series_count }}</strong></div>
             <div>👥 المستخدمين: <strong>{{ users|length }}</strong></div>
         </div>
 
         <div class="url-box">
-            <span>🌐 رابط السيرفر الأساسي (Server URL) لإعطائه للزبائن:</span>
+            <span>🌐 رابط السيرفر الأساسي (Server URL) للزبائن:</span>
             <input type="text" value="{{ host_url }}" readonly onclick="this.select();">
         </div>
 
@@ -148,9 +235,17 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
+    refresh_master_catalog()
     host_url = request.host_url.rstrip('/')
-    sources = get_active_sources()
-    return render_template_string(HTML_TEMPLATE, sources_count=len(sources), users=USERS, host_url=host_url)
+    return render_template_string(
+        HTML_TEMPLATE, 
+        sources_count=len(AGGREGATE_CACHE["sources"]),
+        live_count=len(AGGREGATE_CACHE["live_streams"]),
+        vod_count=len(AGGREGATE_CACHE["vod_streams"]),
+        series_count=len(AGGREGATE_CACHE["series_streams"]),
+        users=USERS, 
+        host_url=host_url
+    )
 
 @app.route('/add_user', methods=['POST'])
 def add_user():
@@ -175,6 +270,7 @@ def delete_user():
 
 @app.route('/player_api.php')
 def xtream_api():
+    refresh_master_catalog()
     username = request.args.get('username')
     password = request.args.get('password')
     action = request.args.get('action')
@@ -191,26 +287,34 @@ def xtream_api():
     except:
         exp_timestamp = int(datetime.now().timestamp()) + 31536000
     
-    sources = get_active_sources()
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-
-    # نظام التجربة الذكية: إذا فشل مصدر، يجرب المصدر التالي تلقائياً حتى ينجح
-    if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
-        for source in sources:
+    # التعامل الفوري مع طلبات القنوات والأفلام والمسلسلات والأقسام المدمجة
+    if action == 'get_live_categories':
+        return jsonify(AGGREGATE_CACHE["live_categories"])
+    elif action == 'get_live_streams':
+        return jsonify(AGGREGATE_CACHE["live_streams"])
+    elif action == 'get_vod_categories':
+        return jsonify(AGGREGATE_CACHE["vod_categories"])
+    elif action == 'get_vod_streams':
+        return jsonify(AGGREGATE_CACHE["vod_streams"])
+    elif action == 'get_series_categories':
+        return jsonify(AGGREGATE_CACHE["series_categories"])
+    elif action == 'get_series':
+        return jsonify(AGGREGATE_CACHE["series_streams"])
+    elif action in ['get_series_info', 'get_vod_info']:
+        # تمرير طلب تفاصيل المسلسل أو الفيلم إلى المصدر المالك له مباشرة
+        stream_id = request.args.get('series_id') or request.args.get('vod_id')
+        mapping = AGGREGATE_CACHE["stream_to_source"].get(str(stream_id))
+        if mapping:
+            src = mapping["source"]
+            orig_id = mapping["orig_id"]
+            target_url = f"{src['dns']}/player_api.php?username={src['user']}&password={src['pass']}&action={action}&{'series_id' if 'series_id' in request.args else 'vod_id'}={orig_id}"
             try:
-                target_url = f"{source['dns']}/player_api.php?username={source['user']}&password={source['pass']}&action={action}"
-                for key, val in request.args.items():
-                    if key not in ['username', 'password', 'action']:
-                        target_url += f"&{key}={val}"
-                
-                r = requests.get(target_url, headers=headers, timeout=3)
+                r = requests.get(target_url, timeout=4)
                 if r.status_code == 200:
-                    data = r.json()
-                    if data:
-                        return jsonify(data)
+                    return jsonify(r.json())
             except:
-                continue
-        return jsonify([])
+                pass
+        return jsonify({})
 
     return jsonify({
         "user_info": {
@@ -243,38 +347,62 @@ def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     
-    sources = get_active_sources()
-    if sources:
-        # التبديل الذكي التلقائي: اختيار المصدر بناءً على رقم القناة مع نظام تدوير تلقائي
-        idx = abs(hash(str(stream_id))) % len(sources)
-        source = sources[idx]
-        target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
+    mapping = AGGREGATE_CACHE["stream_to_source"].get(str(stream_id))
+    if mapping:
+        src = mapping["source"]
+        orig_id = mapping["orig_id"]
+        target_url = f"{src['dns']}/live/{src['user']}/{src['pass']}/{orig_id}.ts"
         return redirect(target_url, code=302)
+        
+    # بديل احتياطي في حال لم يُعثر على المعرّف
+    sources = AGGREGATE_CACHE["sources"]
+    if sources:
+        src = sources[0]
+        return redirect(f"{src['dns']}/live/{src['user']}/{src['pass']}/{stream_id}.ts", code=302)
         
     return "All sources offline", 503
 
-@app.route('/movie/<username>/<password>/<int:movie_id>.<ext>')
+@app.route('/movie/<username>/<password>/<movie_id>.<ext>')
 def movie_proxy(username, password, movie_id, ext):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
-    sources = get_active_sources()
-    if sources:
-        idx = abs(hash(str(movie_id))) % len(sources)
-        source = sources[idx]
-        target_url = f"{source['dns']}/movie/{source['user']}/{source['pass']}/{movie_id}.{ext}"
+    
+    mapping = AGGREGATE_CACHE["stream_to_source"].get(str(movie_id))
+    if mapping:
+        src = mapping["source"]
+        orig_id = mapping["orig_id"]
+        target_url = f"{src['dns']}/movie/{src['user']}/{src['pass']}/{orig_id}.{ext}"
         return redirect(target_url, code=302)
+        
+    sources = AGGREGATE_CACHE["sources"]
+    if sources:
+        src = sources[0]
+        return redirect(f"{src['dns']}/movie/{src['user']}/{src['pass']}/{movie_id}.{ext}", code=302)
+        
     return "Offline", 503
 
-@app.route('/series/<username>/<password>/<int:series_id>.<ext>')
-def series_proxy(username, password, series_id, ext):
+@app.route('/series/<username>/<password>/<path:path_info>')
+def series_proxy(username, password, path_info):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
-    sources = get_active_sources()
-    if sources:
-        idx = abs(hash(str(series_id))) % len(sources)
-        source = sources[idx]
-        target_url = f"{source['dns']}/series/{source['user']}/{source['pass']}/{series_id}.{ext}"
+        
+    # استخراج معرف المسلسل أو الملف المطلوب من المسار وتحويله للمصدر المالك
+    parts = path_info.split('/')
+    series_id = parts[0].split('.')[0] if parts else ""
+    
+    mapping = AGGREGATE_CACHE["stream_to_source"].get(str(series_id))
+    if mapping:
+        src = mapping["source"]
+        # إعادة بناء المسار الأصلي للمسلسل أو الحلقة
+        orig_path = path_info.replace(str(series_id), str(mapping["orig_id"]), 1)
+        target_url = f"{src['dns']}/series/{src['user']}/{src['pass']}/{orig_path}"
         return redirect(target_url, code=302)
+        
+    sources = AGGREGATE_CACHE["sources"]
+    if sources:
+        src = sources[0]
+        return redirect(f"{src['dns']}/series/{src['user']}/{src['pass']}/{path_info}", code=302)
+        
     return "Offline", 503
 
 if __name__ == '__main__':
