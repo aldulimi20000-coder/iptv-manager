@@ -1,33 +1,48 @@
-import flask
+import os
 from flask import Flask, request, Response, jsonify
 import requests
 
 app = Flask(__name__)
 
-# تخزين المصادر (الـ 1000 اشتراك) والمشتركين
-XTREAM_SOURCES = []  
-USERS = {}            
+# تحميل الاشتراكات تلقائياً من ملف sources.txt
+XTREAM_SOURCES = []
+try:
+    if os.path.exists('sources.txt'):
+        with open('sources.txt', 'r', encoding='utf-8') as f:
+            for line in f:
+                parts = line.strip().split(',')
+                if len(parts) >= 3:
+                    XTREAM_SOURCES.append({
+                        "dns": parts[0].strip(),
+                        "user": parts[1].strip(),
+                        "pass": parts[2].strip()
+                    })
+except Exception as e:
+    print(f"Error loading sources: {e}")
+
+# حسابات المستخدمين المسموح لهم بالدخول للوحة أو التطبيق
+USERS = {
+    "bashar": {"password": "123", "max_connections": 2}
+}
 
 @app.route('/')
 def home():
-    return """
+    return f"""
     <html>
     <head><title>IPTV Aggregator Admin Panel</title></head>
     <body style="background:#111; color:#fff; font-family:Arial; text-align:center; padding:50px;">
-        <h1>لوحة تحكم تجميع سيرفرات IPTV تعمل بنجاح!</h1>
-        <p>استخدم الروابط الخاصة بالمشتركين أو أضف المصادر عبر السكربت.</p>
+        <h1>!تعمل بنجاح IPTV لوحة تحكم تجميع سيرفرات</h1>
+        <p>تم تحميل عدد {len(XTREAM_SOURCES)} اشتراك بنجاح والخدمة تعمل بكفاءة.</p>
     </body>
     </html>
     """
 
-# مسار استقبال طلبات المشترك
 @app.route('/player_api.php')
 def xtream_api():
     username = request.args.get('username')
     password = request.args.get('password')
     action = request.args.get('action')
     
-    # التحقق من بيانات المشترك
     if username not in USERS or USERS[username]['password'] != password:
         return jsonify({"user_info": {"auth": 0, "status": "Disabled"}})
     
@@ -45,21 +60,20 @@ def xtream_api():
         }
     })
 
-# مسار تمرير البث (Proxy) مع خاصية التبديل التلقائي عند انقطاع المصدر
 @app.route('/live/<username>/<password>/<stream_id>.ts')
 def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
-
+    
     for source in XTREAM_SOURCES:
         try:
             target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
             r = requests.get(target_url, stream=True, timeout=3)
             if r.status_code == 200:
-                return Response(r.iter_content(chunk_size=1024), content_type=r.headers.get('content-type'))
+                return Response(r.iter_content(chunk_size=1024), content_type=r.headers.get('Content-Type'))
         except:
-            continue  
-
+            continue
+            
     return "All sources offline", 503
 
 if __name__ == '__main__':
