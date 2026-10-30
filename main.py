@@ -150,12 +150,13 @@ def xtream_api():
         expiry_date = datetime.strptime(expiry_str, '%Y-%m-%d')
         if datetime.now() > expiry_date:
             return jsonify({"user_info": {"auth": 0, "status": "Expired", "message": "Subscription Expired"}})
-        # تحويل التاريخ إلى Unix Timestamp لتجنب مشكلة 1970 في التطبيق
         exp_timestamp = int(expiry_date.timestamp())
     except:
         exp_timestamp = int(datetime.now().timestamp()) + 31536000
     
-    # سحب وعرض الأقسام والقنوات والأفلام والمسلسلات الحقيقية من المصادر الخارجية تلقائياً
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
+    # جلب الأقسام والقنوات والأفلام والمسلسلات الحقيقية مع ترويسة متصفح لتجاوز الحظر
     if action in ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series']:
         for source in XTREAM_SOURCES:
             try:
@@ -164,17 +165,15 @@ def xtream_api():
                     if key not in ['username', 'password', 'action']:
                         target_url += f"&{key}={val}"
                 
-                r = requests.get(target_url, timeout=5)
+                r = requests.get(target_url, headers=headers, timeout=4)
                 if r.status_code == 200:
-                    try:
-                        return jsonify(r.json())
-                    except:
-                        return r.text, r.status_code
+                    data = r.json()
+                    if data:  # التأكد أن النتيجة ليست فارغة
+                        return jsonify(data)
             except:
                 continue
         return jsonify([])
 
-    # بيانات تسجيل الدخول المحدثة بالكامل مع التاريخ الصحيح
     return jsonify({
         "user_info": {
             "username": username,
@@ -206,10 +205,11 @@ def stream_proxy(username, password, stream_id):
     if username not in USERS or USERS[username]['password'] != password:
         return "Unauthorized", 401
     
+    headers = {'User-Agent': 'VLC/3.0.16'}
     for source in XTREAM_SOURCES:
         try:
             target_url = f"{source['dns']}/live/{source['user']}/{source['pass']}/{stream_id}.ts"
-            r = requests.get(target_url, stream=True, timeout=3)
+            r = requests.get(target_url, headers=headers, stream=True, timeout=3)
             if r.status_code == 200:
                 return Response(r.iter_content(chunk_size=1024), content_type=r.headers.get('Content-Type'))
         except:
