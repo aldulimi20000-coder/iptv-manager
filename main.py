@@ -10,15 +10,15 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (SAFE_FIX) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (ULTIMATE_FIX) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_SAFE_FIX")
+logger = logging.getLogger("IPTV_ULTIMATE_FIX")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_safe_2026")
-TIMEOUT_LIMIT = 15
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_ultimate_2026")
+TIMEOUT_LIMIT = 10
 CACHE_TTL = 300
 cache_lock = threading.Lock()
 
@@ -105,11 +105,11 @@ def evaluate_single_upstream(node_info):
         usr = node_info.get('username', '')
         pwd = node_info.get('password', '')
         health_check_url = f"{dns}/player_api.php?username={usr}&password={pwd}"
-        response = requests.get(health_check_url, timeout=4)
-        if response.status_code == 200:
-            payload_data = response.json()
-            if isinstance(payload_data, dict) and ("user_info" in payload_data or "server_info" in payload_data):
-                return node_info
+        with requests.get(health_check_url, timeout=3, stream=True) as response:
+            if response.status_code == 200:
+                chunk = next(response.iter_content(chunk_size=4096), b"")
+                if b"user_info" in chunk or b"server_info" in chunk:
+                    return node_info
     except Exception:
         pass
     return None
@@ -129,7 +129,7 @@ def fetch_and_filter_active():
     series_sum = 0
 
     if raw_list:
-        with ThreadPoolExecutor(max_workers=20) as thread_pool:
+        with ThreadPoolExecutor(max_workers=10) as thread_pool:
             eval_results = thread_pool.map(evaluate_single_upstream, raw_list)
         for idx, res_node in enumerate(eval_results, 1):
             if res_node:
@@ -440,10 +440,10 @@ def web_stream_proxy(usr, pwd, stream_subpath):
         destination_url = f"{selected_target_source['dns']}/{media_category}/{selected_target_source['username']}/{selected_target_source['password']}/{unpacked_stream_path}"
         
         try:
-            upstream_req = requests.get(destination_url, stream=True, timeout=25)
+            upstream_req = requests.get(destination_url, stream=True, timeout=30)
             def generate():
                 try:
-                    for chunk in upstream_req.iter_content(chunk_size=8192):
+                    for chunk in upstream_req.iter_content(chunk_size=16384):
                         if chunk:
                             yield chunk
                 except Exception:
