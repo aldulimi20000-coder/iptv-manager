@@ -10,14 +10,14 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (WEB_CONTROL) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (ULTIMATE_FIX) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_WEB_CONTROLLER")
+logger = logging.getLogger("IPTV_ULTIMATE_FIX")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_web_control_master_2026")
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_ultimate_fix_2026")
 TIMEOUT_LIMIT = 8
 CACHE_TTL = 300
 cache_lock = threading.Lock()
@@ -36,7 +36,7 @@ def init_storage():
                     "password": "123",
                     "expiry_date": "2026-12-31",
                     "max_connections": 5,
-                    "allowed_device": "Android TV / TiviMate / IPTV Smarters",
+                    "allowed_device": "Android TV / TiviMate",
                     "status": "Active"
                 }
             }
@@ -51,7 +51,9 @@ def load_sources_json():
     try:
         if os.path.exists(SOURCES_FILE):
             with open(SOURCES_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
     except Exception:
         pass
     return []
@@ -67,7 +69,9 @@ def load_subs_json():
     try:
         if os.path.exists(SUBS_FILE):
             with open(SUBS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
     except Exception:
         pass
     return {
@@ -97,8 +101,11 @@ _WEB_CACHE = {
 
 def evaluate_single_upstream(node_info):
     try:
-        health_check_url = f"{node_info['dns']}/player_api.php?username={node_info['username']}&password={node_info['password']}"
-        response = requests.get(health_check_url, timeout=3.0)
+        dns = node_info.get('dns', '').rstrip('/')
+        usr = node_info.get('username', '')
+        pwd = node_info.get('password', '')
+        health_check_url = f"{dns}/player_api.php?username={usr}&password={pwd}"
+        response = requests.get(health_check_url, timeout=3.5)
         if response.status_code == 200:
             payload_data = response.json()
             if isinstance(payload_data, dict) and ("user_info" in payload_data or "server_info" in payload_data):
@@ -128,9 +135,9 @@ def fetch_and_filter_active():
             if res_node:
                 res_node['index'] = idx
                 functional_sources.append(res_node)
-                channels_sum += 1200
-                movies_sum += 500
-                series_sum += 200
+                channels_sum += 1500
+                movies_sum += 600
+                series_sum += 250
 
     if not functional_sources and raw_list:
         first_src = raw_list[0]
@@ -140,9 +147,9 @@ def fetch_and_filter_active():
     with cache_lock:
         _WEB_CACHE["active_sources"] = functional_sources
         _WEB_CACHE["last_updated"] = now_timestamp
-        _WEB_CACHE["total_channels"] = channels_sum if channels_sum > 0 else len(functional_sources) * 1000
-        _WEB_CACHE["total_movies"] = movies_sum if movies_sum > 0 else len(functional_sources) * 500
-        _WEB_CACHE["total_series"] = series_sum if series_sum > 0 else len(functional_sources) * 200
+        _WEB_CACHE["total_channels"] = channels_sum if channels_sum > 0 else len(functional_sources) * 1200
+        _WEB_CACHE["total_movies"] = movies_sum if movies_sum > 0 else len(functional_sources) * 600
+        _WEB_CACHE["total_series"] = series_sum if series_sum > 0 else len(functional_sources) * 250
         
     return functional_sources
 
@@ -184,7 +191,7 @@ def web_control_panel():
                     message = f"تم حذف المشترك ({target_user}) بنجاح!"
 
             elif form_type == 'add_source':
-                new_dns = request.form.get('dns', '').strip()
+                new_dns = request.form.get('dns', '').strip().rstrip('/')
                 new_usr = request.form.get('s_username', '').strip()
                 new_pwd = request.form.get('s_password', '').strip()
                 if new_dns and new_usr and new_pwd:
@@ -197,6 +204,8 @@ def web_control_panel():
                     with cache_lock:
                         _WEB_CACHE["last_updated"] = 0
                     message = "تم إضافة مصدر الـ Xtream وحفظه في السيرفر بنجاح!"
+                else:
+                    message = "خطأ: يجب ملء جميع حقول المصدر (الرابط، اسم المستخدم، كلمة المرور)!"
 
             elif form_type == 'delete_source':
                 try:
@@ -221,7 +230,7 @@ def web_control_panel():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة التحكم السحابية الكاملة - IPTV Web Control</title>
+        <title>لوحة التحكم السحابية الكاملة - IPTV Web Master</title>
         <style>
             :root {{ --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; --border: #1e293b; }}
             body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
@@ -249,7 +258,7 @@ def web_control_panel():
         <div class="container">
             <header>
                 <h1>⚡ لوحة التحكم بالكامل عبر الويب - IPTV Web Master</h1>
-                <p>تحكم كامل بالمشتركين وإدارة مصادر الـ Xtream مباشرة من المتصفح دون تعديل الكود نهائياً</p>
+                <p>إدارة المشتركين، إضافة المصادر، ودمج القنوات والأفلام والمسلسلات بنجاح</p>
             </header>
             
             <div class="url-box">
@@ -285,8 +294,8 @@ def web_control_panel():
                     <h3>🌐 إضافة مصدر Xtream جديد عبر الويب</h3>
                     <form method="POST">
                         <input type="hidden" name="form_type" value="add_source">
-                        <input type="text" name="dns" placeholder="رابط السيرفر (http://domain.com:port)" required>
-                        <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر" required>
+                        <input type="text" name="dns" placeholder="رابط السيرفر (http://marveltv.info:80)" required>
+                        <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر (مثل 3663930117)" required>
                         <input type="text" name="s_password" placeholder="كلمة المرور للمصدر" required>
                         <button type="submit">حفظ المصدر وتحديث السيرفر</button>
                     </form>
