@@ -10,14 +10,14 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (STREAM_FIX) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (XTREAM_API_FIX) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_STREAM_FIX")
+logger = logging.getLogger("IPTV_XTREAM_API")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_stream_fix_2026")
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_xtream_2026")
 TIMEOUT_LIMIT = 15
 CACHE_TTL = 300
 cache_lock = threading.Lock()
@@ -230,7 +230,7 @@ def web_control_panel():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة التحكم السحابية الكاملة - IPTV Web Master</title>
+        <title>لوحة التحكم السحابية الكاملة - Xtream Web Master</title>
         <style>
             :root {{ --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; --border: #1e293b; }}
             body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
@@ -257,12 +257,12 @@ def web_control_panel():
     <body>
         <div class="container">
             <header>
-                <h1>⚡ لوحة التحكم بالكامل عبر الويب - IPTV Web Master</h1>
-                <p>إدارة المشتركين، إضافة المصادر، وتشغيل البث المباشر والأفلام بنجاح تام</p>
+                <h1>⚡ لوحة التحكم بنظام Xtream API الصافي</h1>
+                <p>إدارة المشتركين والمصادر للعمل مباشرة عبر بروتوكول Xtream Codes API</p>
             </header>
             
             <div class="url-box">
-                <p style="margin:0 0 8px 0; color:#94a3b8; font-size:14px;">🔗 رابط السيرفر الأساسي (URL) الخاص بك لاستخدامه في التطبيقات:</p>
+                <p style="margin:0 0 8px 0; color:#94a3b8; font-size:14px;">🔗 رابط السيرفر الأساسي (URL) لاستخدامه في خانة Xtream Codes بالتطبيق:</p>
                 <code>{current_server_url}</code>
             </div>
 
