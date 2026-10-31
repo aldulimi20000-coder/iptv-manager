@@ -1,4 +1,3 @@
-
 import os
 import json
 import time
@@ -26,7 +25,6 @@ cache_lock = threading.Lock()
 SOURCES_FILE = "sources.json"
 SUBS_FILE = "subscribers.json"
 
-# تهيئة الملفات الافتراضية إذا لم تكن موجودة
 def init_storage():
     if not os.path.exists(SOURCES_FILE):
         with open(SOURCES_FILE, "w", encoding="utf-8") as f:
@@ -136,7 +134,6 @@ def web_control_panel():
     if request.method == 'POST':
         form_type = request.form.get('form_type')
         
-        # إضافة مشترك جديد عبر الويب
         if form_type == 'add_subscriber':
             new_user = request.form.get('username').strip()
             new_pass = request.form.get('password').strip()
@@ -154,7 +151,6 @@ def web_control_panel():
                 save_subs_json(subscribers_db)
                 message = f"تم إضافة المشترك ({new_user}) بنجاح عبر لوحة الويب!"
 
-        # حذف مشترك عبر الويب
         elif form_type == 'delete_subscriber':
             target_user = request.form.get('username')
             if target_user in subscribers_db and target_user != "client_bashar":
@@ -162,7 +158,6 @@ def web_control_panel():
                 save_subs_json(subscribers_db)
                 message = f"تم حذف المشترك ({target_user}) بنجاح!"
 
-        # إضافة مصدر Xtream جديد عبر الويب بدون تعديل كود أو ملفات خارجية
         elif form_type == 'add_source':
             new_dns = request.form.get('dns').strip()
             new_usr = request.form.get('s_username').strip()
@@ -178,16 +173,15 @@ def web_control_panel():
                     _WEB_CACHE["last_updated"] = 0
                 message = "تم إضافة مصدر الـ Xtream وحفظه في السيرفر بنجاح!"
 
-        # حذف مصدر Xtream عبر الويب
         elif form_type == 'delete_source':
             try:
                 src_idx = int(request.form.get('source_index'))
                 if 0 <= src_idx < len(sources_list):
-                    removed = sources_list.pop(src_idx)
+                    sources_list.pop(src_idx)
                     save_sources_json(sources_list)
                     with cache_lock:
                         _WEB_CACHE["last_updated"] = 0
-                    message = f"تم حذف المصدر بنجاح!"
+                    message = "تم حذف المصدر بنجاح!"
             except Exception:
                 pass
 
@@ -239,7 +233,6 @@ def web_control_panel():
             {'<div class="alert">' + message + '</div>' if message else ''}
             
             <div class="grid">
-                <!-- إحصائيات السيرفر -->
                 <div class="card">
                     <h3>📊 إحصائيات النظام والمحتوى</h3>
                     <p>إجمالي المصادر المحفوظة: <span class="stat-val" style="color:var(--accent);">{len(sources_list)}</span></p>
@@ -249,7 +242,6 @@ def web_control_panel():
                     <p>إجمالي المسلسلات: <span class="stat-val" style="color:#a855f7;">{_WEB_CACHE['total_series']}</span></p>
                 </div>
 
-                <!-- إضافة مشترك جديد -->
                 <div class="card">
                     <h3>➕ إضافة مشترك جديد عبر الويب</h3>
                     <form method="POST">
@@ -262,7 +254,6 @@ def web_control_panel():
                     </form>
                 </div>
 
-                <!-- إضافة مصدر Xtream جديد -->
                 <div class="card">
                     <h3>🌐 إضافة مصدر Xtream جديد عبر الويب</h3>
                     <form method="POST">
@@ -275,7 +266,6 @@ def web_control_panel():
                 </div>
             </div>
 
-            <!-- جدول المشتركين -->
             <div class="card">
                 <h3>📋 جدول المشتركين والتحكم المباشر</h3>
                 <div style="overflow-x:auto;">
@@ -297,7 +287,6 @@ def web_control_panel():
                 </div>
             </div>
 
-            <!-- جدول المصادر المحفوظة -->
             <div class="card" style="margin-top:25px;">
                 <h3>🌐 جدول مصادر الـ Xtream المحفوظة في السيرفر</h3>
                 <div style="overflow-x:auto;">
@@ -366,6 +355,7 @@ def xtream_web_gateway():
         except Exception:
             return jsonify([])
 
+    # التعديل الهام هنا لتوافق المنصة الخارجية وعدم طردك من التطبيق:
     login_response_packet = {
         "user_info": {
             "username": usr,
@@ -378,8 +368,8 @@ def xtream_web_gateway():
         },
         "server_info": {
             "url": request.host_url.rstrip('/').replace('https://', 'http://'),
-            "port": "8080",
-            "https_port": "8080",
+            "port": "80",
+            "https_port": "443",
             "server_protocol": "http"
         }
     }
