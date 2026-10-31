@@ -20,20 +20,20 @@ UPSTREAM_SOURCES = [
 ]
 
 # ==============================================================================
-# 2. قاعدة بيانات المشتركين والتحكم المطلق (المدى، الأجهزة، الكلمات المرورية)
+# 2. قاعدة بيانات المشتركين (التحكم المطلق بكافة تفاصيل العميل والاشتراك والأجهزة)
 # ==============================================================================
 SUBSCRIBERS_DB = {
-    # مثال لتحكمك الكامل بمشترك رئيسي وتطبيق الـ IPTV الخاص به:
+    # يمكنك إضافة وتعديل أي عميل تحتاجه هنا بنفسك:
     "client_bashar": {
-        "password": "123",
-        "expiry_date": "2026-12-31",      # تاريخ انتهاء الاشتراك بدقة مطلقة
-        "max_connections": 1,            # عدد الأجهزة المسموحة في نفس الوقت لتطبيق الـ IPTV
-        "allowed_device": "Android TV / IPTV Smarters / TiviMate",
+        "password": "123",                          # كلمة المرور الخاصة بالعميل
+        "expiry_date": "2026-12-31",              # تاريخ انتهاء الاشتراك بدقة مطلقة
+        "max_connections": 1,                     # عدد الأجهزة المسموحة في نفس الوقت للتطبيق
+        "allowed_device": "Android TV / TiviMate / IPTV Smarters",
         "status": "Active"
     }
 }
 
-# نظام تتبع الاتصالات والأجهزة النشطة لمنع المشاركة غير القانونية
+# نظام تتبع الجلسات النشطة
 ACTIVE_SESSIONS = {}
 
 # ==============================================================================
@@ -41,16 +41,15 @@ ACTIVE_SESSIONS = {}
 # ==============================================================================
 @app.route('/')
 def admin_master_dashboard():
-    """لوحة تحكم مرئية وتفاعلية متقدمة لإدارة كل تفصيل في السيرفر والعملاء"""
     dashboard_html = """
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة التحكم المطلقة والقصوى - IPTV Master Proxy</title>
+        <title>لوحة التحكم المطلقة - IPTV Master Proxy</title>
         <style>
-            :root { --bg: #020617; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; }
+            :root { --bg: #020617; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; }
             body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 25px; }
             .container { max-width: 1300px; margin: auto; }
             header { text-align: center; margin-bottom: 40px; }
@@ -71,14 +70,14 @@ def admin_master_dashboard():
         <div class="container">
             <header>
                 <h1>⚡ نظام إدارة وتوحيد الـ IPTV الأقصى قوة (59 Xtream API)</h1>
-                <p>إدارة مركزية متكاملة لتوحيد المصادر، التحكم بفترات الصلاحية، وتقييد الأجهزة لتطبيقات الـ IPTV</p>
+                <p>إدارة مركزية كاملة لتوحيد المصادر، التحكم بالعملاء، وتوافق تام مع تطبيقات الـ IPTV</p>
             </header>
             
             <div class="grid">
                 <div class="card">
                     <h3>🌐 حالة مصادر الـ Xtream المدمجة</h3>
                     <p>إجمالي المصادر الفعالة: <span class="stat-value">{{ total_sources }}</span> مصدراً</p>
-                    <p>حالة الرابط الموحد: <span class="badge" style="background:var(--success);">مستقر وعامل 24/7 على SnapDeploy</span></p>
+                    <p>حالة السيرفر: <span class="badge" style="background:var(--success);">مستقر وعامل 24/7 على SnapDeploy</span></p>
                 </div>
                 <div class="card">
                     <h3>👥 إدارة المشتركين والأجهزة</h3>
@@ -134,18 +133,17 @@ def xtream_player_api_proxy():
     action = request.args.get('action')
     client_device = request.headers.get('User-Agent', 'Unknown Device')
     
-    # 1. التحقق من صلاحية العميل وبيانات اعتماده
+    # 1. التحقق الأمني من صلاحية العميل وبيانات اعتماده
     client = SUBSCRIBERS_DB.get(username)
     if not client or client['password'] != password or client.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
-    # 2. بروكسي العمليات والأقسام والقوائم (Actions) لتطبيق الـ IPTV (مثل TiviMate و Smarters)
+    # 2. بروكسي العمليات والأقسام وقوائم القنوات والأفلام لتطبيق الـ IPTV
     if action and UPSTREAM_SOURCES:
         try:
-            target_source = UPSTREAM_SOURCES[0] # المصدر الأساسي لتمرير قوائم القنوات والأفلام
+            target_source = UPSTREAM_SOURCES[0]
             upstream_url = f"{target_source['dns']}/player_api.php?username={target_source['username']}&password={target_source['password']}&action={action}"
             
-            # تمرير كافة المعاملات الإضافية الواردة من التطبيق
             for key, val in request.args.items():
                 if key not in ['username', 'password']:
                     upstream_url += f"&{key}={val}"
@@ -155,7 +153,7 @@ def xtream_player_api_proxy():
         except Exception as e:
             return jsonify({"error": f"Upstream Action Proxy Failed: {str(e)}"}), 500
 
-    # 3. استجابة تسجيل الدخول النظامية التي يتوقعها تطبيق الـ IPTV لفتح الواجهة الرئيسية
+    # 3. استجابة تسجيل الدخول النظامية لتطبيق الـ IPTV
     response_payload = {
         "user_info": {
             "username": username,
@@ -184,15 +182,13 @@ def xtream_player_api_proxy():
 @app.route('/series/<username>/<password>/<path:stream_path>')
 def proxy_stream_dispatcher(username, password, stream_path):
     try:
-        # التحقق الأمني من العميل قبل بدء التدفق والبث
         client = SUBSCRIBERS_DB.get(username)
         if not client or client['password'] != password:
             return "Unauthorized Stream Access", 401
             
         if UPSTREAM_SOURCES:
-            # توجيه البث للمصدر المتاح وتمرير المسار الكامل بنجاح
             target_source = UPSTREAM_SOURCES[0]
-            media_type = request.path.split('/')[1] # live, movie, or series
+            media_type = request.path.split('/')[1]
             
             target_url = f"{target_source['dns']}/{media_type}/{target_source['username']}/{target_source['password']}/{stream_path}"
             return redirect(target_url, code=302)
