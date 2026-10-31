@@ -1,15 +1,16 @@
 import os
 import requests
 from flask import Flask, Response, redirect, request, jsonify, render_template_string
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_supreme_ultimate_iptv_master_2026")
-TIMEOUT_LIMIT = 8
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_supreme_iptv_master_2026")
+TIMEOUT_LIMIT = 6
 
 # ==============================================================================
-# 1. قراءة وفحص مصادر الـ Xtream الـ 59 تلقائياً من ملف sources.txt
+# 1. قراءة المصادر من ملف sources.txt
 # ==============================================================================
 def load_sources_from_file():
     sources = []
@@ -22,7 +23,7 @@ def load_sources_from_file():
                         parts = line.split(",")
                         if len(parts) >= 3:
                             sources.append({
-                                "id": idx,
+                                "index": idx,
                                 "dns": parts[0].strip(),
                                 "username": parts[1].strip(),
                                 "password": parts[2].strip()
@@ -32,40 +33,47 @@ def load_sources_from_file():
     return sources
 
 # ==============================================================================
-# 2. قاعدة بيانات المشتركين (أنت تتحكم بكافة الصلاحيات، الأسماء، وكلمات المرور)
+# 2. قاعدة بيانات المشتركين (أنت تتحكم بالأسماء، كلمات المرور، والمدة)
 # ==============================================================================
 SUBSCRIBERS_DB = {
     "client_bashar": {
-        "password": "123",                          # كلمة المرور المخصصة للعميل
-        "expiry_date": "2026-12-31",              # تاريخ انتهاء الاشتراك بدقة
-        "max_connections": 2,                     # عدد الأجهزة المسموحة في نفس الوقت
+        "password": "123",                          # كلمة المرور الخاصة بك في التطبيق
+        "expiry_date": "2026-12-31",              # تاريخ انتهاء الاشتراك
+        "max_connections": 2,                     # عدد الأجهزة المسموحة
         "allowed_device": "Android TV / TiviMate / IPTV Smarters",
-        "status": "Active"                        # Active أو Suspended
-    },
-    # يمكنك إضافة عملاء جدد هنا بكل سهولة:
-    # "client_2": {"password": "456", "expiry_date": "2026-06-30", "max_connections": 1, "allowed_device": "Smart IPTV", "status": "Active"}
+        "status": "Active"
+    }
 }
 
 # ==============================================================================
-# 3. محرك الفحص الذكي (يأخذ الأكواد التي تعمل فقط ويستبعد التالفة)
+# 3. محرك الفحص السريع جداً والمتوازي (Test & Filter 59 Sources)
 # ==============================================================================
+def test_single_source(src):
+    try:
+        check_url = f"{src['dns']}/player_api.php?username={src['username']}&password={src['password']}"
+        resp = requests.get(check_url, timeout=2.5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "user_info" in data:
+                return src
+    except Exception:
+        pass
+    return None
+
 def get_active_upstream_sources():
     raw_sources = load_sources_from_file()
     active_sources = []
-    for src in raw_sources:
-        try:
-            check_url = f"{src['dns']}/player_api.php?username={src['username']}&password={src['password']}"
-            resp = requests.get(check_url, timeout=3)
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("user_info", {}).get("auth") == 1 or "user_info" in data:
-                    active_sources.append(src)
-        except Exception:
-            continue
-    return active_sources if active_sources else raw_sources
+    # فحص جميع المصادر في نفس اللحظة (Threads) لسرعة فائقة
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(test_single_source, raw_sources)
+    for res in results:
+        if res:
+            active_sources.append(res)
+    # إذا لم يعمل أي مصدر، نرجع أول مصدر احتياطياً لمنع توقف السيرفر
+    return active_sources if active_sources else raw_sources[:1]
 
 # ==============================================================================
-# 4. لوحة التحكم الإدارية الاحترافية والقصوى (Admin Dashboard)
+# 4. لوحة التحكم الإدارية الاحترافية (Admin Dashboard)
 # ==============================================================================
 @app.route('/')
 def admin_master_dashboard():
@@ -79,7 +87,7 @@ def admin_master_dashboard():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>لوحة التحكم المطلقة - IPTV Master Proxy</title>
         <style>
-            :root { --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; }
+            :root { --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; }
             body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
             .container { max-width: 1250px; margin: auto; }
             header { text-align: center; margin-bottom: 30px; padding: 25px; background: var(--card); border-radius: 18px; border: 1px solid #1e293b; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -100,14 +108,14 @@ def admin_master_dashboard():
     <body>
         <div class="container">
             <header>
-                <h1>⚡ نظام إدارة وتوحيد الـ IPTV الأقصى قوة</h1>
-                <p>فحص تلقائي للمصادر من ملف sources.txt، دمج القنوات والأفلام والمسلسلات، وإدارة مركزية للعملاء</p>
+                <h1>⚡ نظام إدارة وتوحيد الـ IPTV فائق القوة</h1>
+                <p>فحص ذكي ومتوازي للمصادر، دمج شامل للقنوات والأفلام والمسلسلات، وإدارة مركزية للعملاء</p>
             </header>
             
             <div class="grid">
                 <div class="card">
-                    <h3>🌐 حالة مصادر الـ Xtream (59 مصدر)</h3>
-                    <p>إجمالي المصادر المضافة في الملف: <span class="stat-value" style="color:#38bdf8;">{{ total_raw }}</span> مصدراً</p>
+                    <h3>🌐 حالة مصادر الـ Xtream المدمجة</h3>
+                    <p>إجمالي المصادر في الملف: <span class="stat-value" style="color:#38bdf8;">{{ total_raw }}</span> مصدراً</p>
                     <p>المصادر النشطة والشغالة فقط: <span class="stat-value">{{ active_count }}</span> مصدراً</p>
                 </div>
                 <div class="card">
@@ -118,7 +126,7 @@ def admin_master_dashboard():
             </div>
 
             <div class="card">
-                <h3>📋 جدول التحكم الشامل بالعملاء (الصلاحيات، كلمات المرور، والأجهزة)</h3>
+                <h3>📋 جدول التحكم الشامل بالعملاء</h3>
                 <div class="table-responsive">
                     <table>
                         <thead>
@@ -141,10 +149,6 @@ def admin_master_dashboard():
                                 <td>{{ data.allowed_device }}</td>
                                 <td><span style="color: var(--success); font-weight: bold;">{{ data.status }}</span></td>
                             </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6" style="text-align: center; color: #94a3b8; padding: 25px;">لا توجد حسابات مسجلة. أضفهم في SUBSCRIBERS_DB!</td>
-                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -163,7 +167,7 @@ def admin_master_dashboard():
     )
 
 # ==============================================================================
-# 5. نقطة اتصال تطبيقات الـ IPTV (Xtream API Login & Full Actions Proxy)
+# 5. نقطة اتصال وتوحيد الـ API (Xtream API Login & Aggregated Proxy)
 # ==============================================================================
 @app.route('/player_api.php')
 def xtream_player_api_proxy():
@@ -171,29 +175,48 @@ def xtream_player_api_proxy():
     password = request.args.get('password')
     action = request.args.get('action')
     
-    # 1. التحقق من العميل وصلاحية اشتراكه
+    # 1. التحقق من العميل
     client = SUBSCRIBERS_DB.get(username)
     if not client or client['password'] != password or client.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
     active_sources = get_active_upstream_sources()
     
-    # 2. معالجة كافة الأقسام والطلبات (Live, VOD, Series) وتوجيهها للمصدر الشغال
+    # 2. تجميع دمج الأقسام والقنوات والأفلام والمسلسلات من جميع المصادر الفعالة
     if action and active_sources:
         try:
-            target_source = active_sources[0]
-            upstream_url = f"{target_source['dns']}/player_api.php?username={target_source['username']}&password={target_source['password']}&action={action}"
-            
-            for key, val in request.args.items():
-                if key not in ['username', 'password']:
-                    upstream_url += f"&{key}={val}"
-            
-            resp = requests.get(upstream_url, timeout=TIMEOUT_LIMIT)
-            return resp.content, resp.status_code, dict(resp.headers)
+            combined_data = []
+            for src in active_sources:
+                upstream_url = f"{src['dns']}/player_api.php?username={src['username']}&password={src['password']}&action={action}"
+                for key, val in request.args.items():
+                    if key not in ['username', 'password']:
+                        upstream_url += f"&{key}={val}"
+                
+                try:
+                    resp = requests.get(upstream_url, timeout=TIMEOUT_LIMIT)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if isinstance(data, list):
+                            # تمييز المعرفات لكي لا تتداخل بين المصادر
+                            for item in data:
+                                if isinstance(item, dict):
+                                    if 'stream_id' in item:
+                                        item['stream_id'] = f"s{src['index']}_{item['stream_id']}"
+                                    elif 'series_id' in item:
+                                        item['series_id'] = f"s{src['index']}_{item['series_id']}"
+                                    elif 'category_id' in item:
+                                        item['category_id'] = f"s{src['index']}_{item['category_id']}"
+                                    combined_data.append(item)
+                        elif isinstance(data, dict):
+                            # لبعض طلبات التفاصيل الفردية
+                            return jsonify(data)
+                except Exception:
+                    continue
+            return jsonify(combined_data)
         except Exception:
             return jsonify([])
 
-    # 3. استجابة تسجيل الدخول الرسمية المتوافقة مع كافة تطبيقات الـ IPTV
+    # 3. استجابة تسجيل الدخول الرسمية
     response_payload = {
         "user_info": {
             "username": username,
@@ -214,7 +237,7 @@ def xtream_player_api_proxy():
     return jsonify(response_payload)
 
 # ==============================================================================
-# 6. محرك توجيه البث الشامل (القنوات المباشرة، الأفلام، المسلسلات)
+# 6. محرك توجيه البث الذكي والمدمج (Live, Movie, Series Dispatcher)
 # ==============================================================================
 @app.route('/live/<username>/<password>/<path:stream_path>')
 @app.route('/movie/<username>/<password>/<path:stream_path>')
@@ -225,10 +248,26 @@ def proxy_stream_dispatcher(username, password, stream_path):
         return "Unauthorized Stream Access", 401
         
     active_sources = get_active_upstream_sources()
-    if active_sources:
-        target_source = active_sources[0]
+    
+    # استخراج رقم المصدر من معرف البث المدمج (مثل s1_12345)
+    target_src = active_sources[0] if active_sources else None
+    real_stream_path = stream_path
+    
+    if stream_path.startswith("s") and "_" in stream_path:
+        try:
+            parts = stream_path.split("_", 1)
+            src_idx = int(parts[0][1:])
+            real_stream_path = parts[1]
+            for src in active_sources:
+                if src['index'] == src_idx:
+                    target_src = src
+                    break
+        except Exception:
+            pass
+            
+    if target_src:
         media_type = request.path.split('/')[1]
-        target_url = f"{target_source['dns']}/{media_type}/{target_source['username']}/{target_source['password']}/{stream_path}"
+        target_url = f"{target_src['dns']}/{media_type}/{target_src['username']}/{target_src['password']}/{real_stream_path}"
         return redirect(target_url, code=302)
         
     return "No Active Upstream Sources Available", 503
