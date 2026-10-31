@@ -355,7 +355,7 @@ def xtream_web_gateway():
     
     subscribers_db = load_subs_json()
     subscriber_profile = subscribers_db.get(usr)
-    if not subscriber_profile or subscriber_profile.get('password'] != pwd or subscriber_profile.get('status') != "Active":
+    if not subscriber_profile or subscriber_profile.get('password') != pwd or subscriber_profile.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
     valid_sources = fetch_and_filter_active()
@@ -410,7 +410,6 @@ def xtream_web_gateway():
     }
     return jsonify(login_response_packet)
 
-# توجيه وتشغيل البث المباشر والأفلام والمسلسلات مع تمرير البث بسلاسة تامة
 @app.route('/live/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/movie/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/series/<usr>/<pwd>/<path:stream_subpath>')
@@ -440,7 +439,6 @@ def web_stream_proxy(usr, pwd, stream_subpath):
         media_category = request.path.split('/')[1]
         destination_url = f"{selected_target_source['dns']}/{media_category}/{selected_target_source['username']}/{selected_target_source['password']}/{unpacked_stream_path}"
         
-        # استخدام وكيل تمرير مباشر (Streaming Proxy) لمنع الشاشة السوداء وضمان تشغيل البث
         try:
             upstream_req = requests.get(destination_url, stream=True, timeout=20)
             return Response(
