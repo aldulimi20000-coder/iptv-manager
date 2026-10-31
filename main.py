@@ -12,33 +12,42 @@ from datetime import datetime
 # ==============================================================================
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (DEEP_CORE) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (INTERACTIVE_CORE) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_DEEP_MAXIMUM_MASTER")
+logger = logging.getLogger("IPTV_INTERACTIVE_MASTER")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_deep_maximum_enterprise_master_2026")
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_interactive_supreme_master_2026")
 TIMEOUT_LIMIT = 8
-CACHE_TTL = 300  # التخزين المؤقت للمصادر النشطة (5 دقائق)
+CACHE_TTL = 300
 cache_lock = threading.Lock()
 
 # ==============================================================================
-# 1. الذاكرة المؤقتة الذكية وإدارة الخلفية (Advanced Thread-Safe Caching Engine)
+# 1. الذاكرة المؤقتة الذكية وإدارة الملفات (Thread-Safe Caching & Storage Engine)
 # ==============================================================================
-_DEEP_CACHE_STORAGE = {
+_INTERACTIVE_CACHE = {
     "active_sources": [],
     "raw_count": 0,
     "last_updated": 0,
-    "system_status": "Deep Operational",
     "request_counter": 0,
-    "error_counter": 0,
-    "active_streams_count": 0
+    "error_counter": 0
 }
 
-def load_sources_from_disk_deep():
-    """قراءة ملف sources.txt مع فحص السلامة والهيكلة بدقة مطلقة واستبعاد التعليقات"""
+# قاعدة بيانات المشتركين القابلة للتعديل والتحكم المباشر
+SUBSCRIBERS_DB = {
+    "client_bashar": {
+        "password": "123",
+        "expiry_date": "2026-12-31",
+        "max_connections": 5,
+        "allowed_device": "Android TV / TiviMate / IPTV Smarters",
+        "status": "Active",
+        "current_active_connections": 1
+    }
+}
+
+def load_sources_from_disk_interactive():
     parsed_sources = []
     try:
         if os.path.exists("sources.txt"):
@@ -54,15 +63,11 @@ def load_sources_from_disk_deep():
                                 "username": segments[1].strip(),
                                 "password": segments[2].strip()
                             })
-        logger.info(f"تم بنجاح تحميل عدد {len(parsed_sources)} مصدراً خاماً من ملف sources.txt في النمط العميق.")
     except Exception as err:
-        logger.error(f"خطأ حرج أثناء قراءة ملف المصادر بالعمق: {str(err)}")
-        with cache_lock:
-            _DEEP_CACHE_STORAGE["error_counter"] += 1
+        logger.error(f"خطأ في قراءة المصادر: {str(err)}")
     return parsed_sources
 
-def evaluate_single_upstream_node_deep(node_info):
-    """فحص عقدة مزود خدمة واحدة للتأكد من صلاحيتها واستقرارها عبر الـ API"""
+def evaluate_single_upstream_interactive(node_info):
     try:
         health_check_url = f"{node_info['dns']}/player_api.php?username={node_info['username']}&password={node_info['password']}"
         response = requests.get(health_check_url, timeout=3.5)
@@ -74,137 +79,174 @@ def evaluate_single_upstream_node_deep(node_info):
         pass
     return None
 
-def fetch_and_filter_active_sources_deep():
-    """محرك الفحص المتوازي فائق السرعة مع تأمين الخيوط (Thread-Safe Multi-threading)"""
-    global _DEEP_CACHE_STORAGE
+def fetch_and_filter_active_interactive():
+    global _INTERACTIVE_CACHE
     now_timestamp = time.time()
     
     with cache_lock:
-        if now_timestamp - _DEEP_CACHE_STORAGE["last_updated"] < CACHE_TTL and _DEEP_CACHE_STORAGE["active_sources"]:
-            return _DEEP_CACHE_STORAGE["active_sources"]
+        if now_timestamp - _INTERACTIVE_CACHE["last_updated"] < CACHE_TTL and _INTERACTIVE_CACHE["active_sources"]:
+            return _INTERACTIVE_CACHE["active_sources"]
             
-    raw_list = load_sources_from_disk_deep()
+    raw_list = load_sources_from_disk_interactive()
     with cache_lock:
-        _DEEP_CACHE_STORAGE["raw_count"] = len(raw_list)
+        _INTERACTIVE_CACHE["raw_count"] = len(raw_list)
         
     functional_sources = []
     if raw_list:
-        logger.info("بدء الفحص الصحي المتوازي العميق لجميع المصادر المرفوعة...")
         with ThreadPoolExecutor(max_workers=45) as thread_pool:
-            eval_results = thread_pool.map(evaluate_single_upstream_node_deep, raw_list)
+            eval_results = thread_pool.map(evaluate_single_upstream_interactive, raw_list)
         for res_node in eval_results:
             if res_node:
                 functional_sources.append(res_node)
                 
     if not functional_sources and raw_list:
-        functional_sources = raw_list[:1]  # ضمان وجود مصدر احتياطي دائماً لعدم التوقف
+        functional_sources = raw_list[:1]
         
     with cache_lock:
-        _DEEP_CACHE_STORAGE["active_sources"] = functional_sources
-        _DEEP_CACHE_STORAGE["last_updated"] = now_timestamp
-        _DEEP_CACHE_STORAGE["active_streams_count"] = len(functional_sources)
+        _INTERACTIVE_CACHE["active_sources"] = functional_sources
+        _INTERACTIVE_CACHE["last_updated"] = now_timestamp
         
-    logger.info(f"اكتمل الفحص العميق بنجاح. المصادر النشطة والشغالة: {len(functional_sources)} من أصل {len(raw_list)}")
     return functional_sources
 
 # ==============================================================================
-# 2. قاعدة بيانات المشتركين المركزية ونظام الأمان المتقدم (Subscribers Deep DB)
+# 2. واجهة التحكم الإدارية التفاعلية بالكامل (Interactive Admin Dashboard)
 # ==============================================================================
-SUBSCRIBERS_DB = {
-    "client_bashar": {
-        "password": "123",
-        "expiry_date": "2026-12-31",
-        "max_connections": 5,
-        "allowed_device": "Android TV / TiviMate / IPTV Smarters Pro / VLC / Enigma2",
-        "status": "Active",
-        "current_active_connections": 1
-    }
-}
+@app.route('/', methods=['GET', 'POST'])
+def interactive_admin_panel():
+    message = ""
+    if request.method == 'POST':
+        form_type = request.form.get('form_type')
+        
+        # إضافة مشترك جديد مباشرة من المتصفح
+        if form_type == 'add_subscriber':
+            new_user = request.form.get('username').strip()
+            new_pass = request.form.get('password').strip()
+            new_exp = request.form.get('expiry_date').strip()
+            new_max = int(request.form.get('max_connections', 2))
+            
+            if new_user and new_pass:
+                SUBSCRIBERS_DB[new_user] = {
+                    "password": new_pass,
+                    "expiry_date": new_exp if new_exp else "2026-12-31",
+                    "max_connections": new_max,
+                    "allowed_device": "All IPTV Devices",
+                    "status": "Active",
+                    "current_active_connections": 0
+                }
+                message = f"تم إضافة المشترك ({new_user}) بنجاح!"
 
-# ==============================================================================
-# 3. واجهة التحكم الإدارية السينمائية الفائقة (Deep Maximum Admin Dashboard)
-# ==============================================================================
-@app.route('/')
-def deep_maximum_admin_panel():
-    raw_sources_list = load_sources_from_disk_deep()
-    active_sources_list = fetch_and_filter_active_sources_deep()
+        # حذف مشترك
+        elif form_type == 'delete_subscriber':
+            target_user = request.form.get('username')
+            if target_user in SUBSCRIBERS_DB and target_user != "client_bashar":
+                del SUBSCRIBERS_DB[target_user]
+                message = f"تم حذف المشترك ({target_user}) بنجاح!"
+
+        # إضافة مصدر Xtream جديد مباشرة إلى ملف sources.txt من الواجهة
+        elif form_type == 'add_source':
+            new_dns = request.form.get('dns').strip()
+            new_usr = request.form.get('s_username').strip()
+            new_pwd = request.form.get('s_password').strip()
+            if new_dns and new_usr and new_pwd:
+                with open("sources.txt", "a", encoding="utf-8") as f:
+                    f.write(f"\n{new_dns},{new_usr},{new_pwd}")
+                # إعادة ضبط الكاش لتحديث المصادر فوراً
+                with cache_lock:
+                    _INTERACTIVE_CACHE["last_updated"] = 0
+                message = "تم إضافة المصدر الجديد بنجاح وتم تحديث السيرفر!"
+
+    raw_sources_list = load_sources_from_disk_interactive()
+    active_sources_list = fetch_and_filter_active_interactive()
     
-    dashboard_html_deep = """
+    dashboard_html = f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة القيادة والسيطرة القصوى - IPTV Deep Maximum Core</title>
+        <title>لوحة التحكم التفاعلية المطلقة - IPTV Master</title>
         <style>
-            :root { --bg-base: #010409; --panel-bg: #0d1117; --accent-cyan: #38bdf8; --text-main: #c9d1d9; --success-clr: #3fb950; --warning-clr: #d29922; --border-clr: #30363d; }
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-base); color: var(--text-main); margin: 0; padding: 30px; }
-            .container-deep { max-width: 1500px; margin: auto; }
-            .header-deep { text-align: center; margin-bottom: 40px; padding: 45px; background: var(--panel-bg); border-radius: 24px; border: 1px solid var(--border-clr); box-shadow: 0 25px 60px rgba(0,0,0,0.9); }
-            .header-deep h1 { color: var(--accent-cyan); margin: 0; font-size: 34px; text-shadow: 0 0 35px rgba(56,189,248,0.6); }
-            .header-deep p { color: #8b949e; font-size: 15px; margin-top: 15px; }
-            .grid-deep { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 22px; margin-bottom: 35px; }
-            .card-deep { background: var(--panel-bg); padding: 28px; border-radius: 20px; border: 1px solid var(--border-clr); box-shadow: 0 12px 35px rgba(0,0,0,0.6); }
-            .card-deep h3 { margin-top: 0; color: var(--accent-cyan); border-bottom: 2px solid var(--border-clr); padding-bottom: 14px; font-size: 19px; }
-            .metric-val { font-size: 38px; font-weight: bold; color: var(--success-clr); }
-            .table-wrap { width: 100%; overflow-x: auto; }
-            table { width: 100%; border-collapse: collapse; margin-top: 18px; min-width: 850px; }
-            th, td { padding: 18px 16px; text-align: right; border-bottom: 1px solid var(--border-clr); font-size: 14px; }
-            th { color: var(--accent-cyan); background: var(--border-clr); }
-            tr:hover { background: rgba(48, 54, 61, 0.4); }
-            .badge-deep { background: var(--accent-cyan); color: #010409; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; }
+            :root {{ --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; --border: #1e293b; }}
+            body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
+            .container {{ max-width: 1300px; margin: auto; }}
+            header {{ text-align: center; margin-bottom: 25px; padding: 25px; background: var(--card); border-radius: 18px; border: 1px solid var(--border); }}
+            header h1 {{ color: var(--accent); margin: 0; font-size: 26px; }}
+            .alert {{ background: #065f46; color: #6ee7b7; padding: 12px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }}
+            .card {{ background: var(--card); padding: 20px; border-radius: 18px; border: 1px solid var(--border); box-shadow: 0 8px 25px rgba(0,0,0,0.5); }}
+            .card h3 {{ margin-top: 0; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 10px; font-size: 17px; }}
+            .stat-val {{ font-size: 30px; font-weight: bold; color: var(--success); }}
+            input, select {{ width: 100%; padding: 10px; margin: 8px 0; background: #020617; border: 1px solid var(--border); color: white; border-radius: 8px; box-sizing: border-box; }}
+            button {{ background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }}
+            button:hover {{ opacity: 0.9; }}
+            button.danger {{ background: var(--danger); }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 600px; }}
+            th, td {{ padding: 12px; text-align: right; border-bottom: 1px solid var(--border); font-size: 13px; }}
+            th {{ color: var(--accent); background: var(--border); }}
+            .badge {{ background: var(--accent); color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; }}
         </style>
     </head>
     <body>
-        <div class="container-deep">
-            <div class="header-deep">
-                <h1>⚡ النظام المركزي الأقصى عمقاً - IPTV Deep Maximum Proxy Engine</h1>
-                <p>إدارة عميقة متكاملة، فحص مصادر فوري متعدد الخيوط، دمج قنوات وأفلام ومسلسلات، وتتبع حي فائق الأداء</p>
-            </div>
+        <div class="container">
+            <header>
+                <h1>⚡ لوحة التحكم التفاعلية بالكامل - IPTV Control Panel</h1>
+                <p>تحكم مطلق بالمشتركين، أضف أو احذف العملاء، وتحكم بمصادر الـ Xtream مباشرة من المتصفح</p>
+            </header>
             
-            <div class="grid-deep">
-                <div class="card-deep">
-                    <h3>🌐 حالة مصادر الـ Xtream (sources.txt)</h3>
-                    <p>إجمالي المصادر في الملف: <span class="metric-val" style="color:var(--accent-cyan);">{{ total_raw }}</span> مصدراً</p>
-                    <p>المصادر النشطة والشغالة فقط: <span class="metric-val">{{ active_count }}</span> مصدراً</p>
+            {'<div class="alert">' + message + '</div>' if message else ''}
+            
+            <div class="grid">
+                <!-- إحصائيات النظام -->
+                <div class="card">
+                    <h3>📊 حالة السيرفر والمصادر</h3>
+                    <p>إجمالي المصادر في الملف: <span class="stat-val" style="color:var(--accent);">{len(raw_sources_list)}</span></p>
+                    <p>المصادر النشطة والشغالة: <span class="stat-val">{len(active_sources_list)}</span></p>
+                    <p>إجمالي المشتركين المسجلين: <span class="stat-val">{len(SUBSCRIBERS_DB)}</span></p>
                 </div>
-                <div class="card-deep">
-                    <h3>👥 مراقبة وإدارة المشتركين والاتصالات</h3>
-                    <p>إجمالي العملاء المسجلين: <span class="metric-val">{{ total_subs }}</span> عميلاً</p>
-                    <p>حالة النظام السحابي: <span class="badge-deep" style="background:var(--success-clr); color:white;">يعمل بكفاءة عميقة 24/7</span></p>
+
+                <!-- إضافة مشترك جديد -->
+                <div class="card">
+                    <h3>➕ إضافة مشترك جديد</h3>
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="add_subscriber">
+                        <input type="text" name="username" placeholder="اسم المستخدم (Username)" required>
+                        <input type="text" name="password" placeholder="كلمة المرور (Password)" required>
+                        <input type="text" name="expiry_date" placeholder="تاريخ الانتهاء (YYYY-MM-DD)" value="2026-12-31">
+                        <input type="number" name="max_connections" placeholder="عدد الأجهزة المسموحة" value="2">
+                        <button type="submit">حفظ وإضافة العميل</button>
+                    </form>
                 </div>
-                <div class="card-deep">
-                    <h3>📊 إحصائيات المعالجة والطلب الحية</h3>
-                    <p>إجمالي الطلبات المستلمة: <span class="metric-val" style="color:var(--warning-clr);">{{ req_count }}</span> طلباً</p>
-                    <p>أخطاء النظام المسجلة: <span class="metric-val" style="color:#f85149; font-size:26px;">{{ err_count }}</span> أخطاء</p>
+
+                <!-- إضافة مصدر Xtream جديد -->
+                <div class="card">
+                    <h3>🌐 إضافة مصدر Xtream جديد</h3>
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="add_source">
+                        <input type="text" name="dns" placeholder="رابط السيرفر (http://domain.com:port)" required>
+                        <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر" required>
+                        <input type="text" name="s_password" placeholder="كلمة المرور للمصدر" required>
+                        <button type="submit">إضافة المصدر وتحديث الفحص</button>
+                    </form>
                 </div>
             </div>
 
-            <div class="card-deep">
-                <h3>📋 جدول التحكم المركزي العميق بالمشتركين والصلاحيات</h3>
-                <div class="table-wrap">
+            <!-- جدول المشتركين والتفاعل معهم -->
+            <div class="card">
+                <h3>📋 جدول المشتركين والإدارة المباشرة</h3>
+                <div style="overflow-x:auto;">
                     <table>
                         <thead>
                             <tr>
-                                <th>اسم المستخدم (Username)</th>
-                                <th>كلمة المرور (Password)</th>
-                                <th>تاريخ انتهاء الاشتراك</th>
-                                <th>عدد الأجهزة المسموحة</th>
-                                <th>نوع الأجهزة المعتمدة</th>
-                                <th>حالة الحساب</th>
+                                <th>اسم المستخدم</th>
+                                <th>كلمة المرور</th>
+                                <th>تاريخ الانتهاء</th>
+                                <th>الأجهزة</th>
+                                <th>الحالة</th>
+                                <th>إجراءات الحذف</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for uname, info in subs_data.items() %}
-                            <tr>
-                                <td><strong>{{ uname }}</strong></td>
-                                <td><code>{{ info.password }}</code></td>
-                                <td><span style="color: var(--accent-cyan); font-weight:bold;">{{ info.expiry_date }}</span></td>
-                                <td><span class="badge-deep">{{ info.max_connections }} أجهزة</span></td>
-                                <td>{{ info.allowed_device }}</td>
-                                <td><span style="color: var(--success-clr); font-weight: bold;">{{ info.status }}</span></td>
-                            </tr>
-                            {% endfor %}
+                            {''.join([f"<tr><td><strong>{uname}</strong></td><td><code>{info['password']}</code></td><td>{info['expiry_date']}</td><td><span class='badge'>{info['max_connections']} جهاز</span></td><td style='color:var(--success); font-weight:bold;'>{info['status']}</td><td>" + (f"<form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_subscriber'><input type='hidden' name='username' value='{uname}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف</button></form>" if uname != "client_bashar" else "<span style='color:#64748b;'>حساب أساسي</span>") + "</td></tr>" for uname, info in SUBSCRIBERS_DB.items()])}
                         </tbody>
                     </table>
                 </div>
@@ -213,39 +255,23 @@ def deep_maximum_admin_panel():
     </body>
     </html>
     """
-    return render_template_string(
-        dashboard_html_deep,
-        total_raw=len(raw_sources_list),
-        active_count=len(active_sources_list),
-        total_subs=len(SUBSCRIBERS_DB),
-        subs_data=SUBSCRIBERS_DB,
-        req_count=_DEEP_CACHE_STORAGE["request_counter"],
-        err_count=_DEEP_CACHE_STORAGE["error_counter"]
-    )
+    return render_template_string(dashboard_html)
 
 # ==============================================================================
-# 4. محرك توجيه وتوحيد واجهة الـ API العملاقة (Xtream Deep API Gateway)
+# 3. بوابة توجيه الـ API وتوحيد المحتوى (Xtream API Gateway)
 # ==============================================================================
 @app.route('/player_api.php')
-def xtream_deep_gateway_api():
-    global _DEEP_CACHE_STORAGE
-    with cache_lock:
-        _DEEP_CACHE_STORAGE["request_counter"] += 1
-    
+def xtream_interactive_gateway():
     usr = request.args.get('username')
     pwd = request.args.get('password')
     act = request.args.get('action')
     
     subscriber_profile = SUBSCRIBERS_DB.get(usr)
     if not subscriber_profile or subscriber_profile['password'] != pwd or subscriber_profile.get('status') != "Active":
-        logger.warning(f"محاولة دخول غير مصرح بها للعميق باستخدام اسم المستخدم: {usr}")
-        with cache_lock:
-            _DEEP_CACHE_STORAGE["error_counter"] += 1
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
-    valid_sources = fetch_and_filter_active_sources_deep()
+    valid_sources = fetch_and_filter_active_interactive()
     
-    # معالجة وتجميع الطلبات الشاملة بالعمق الكامل (القنوات، الأقسام، الأفلام، المسلسلات، الحلقات، EPG)
     if act and valid_sources:
         try:
             aggregated_payload = []
@@ -262,7 +288,6 @@ def xtream_deep_gateway_api():
                         if isinstance(json_content, list):
                             for element in json_content:
                                 if isinstance(element, dict):
-                                    # إضافة بادئة تعريفا عازلة لتجنب تصادم المعرفات بين المصادر المتعددة
                                     if 'stream_id' in element:
                                         element['stream_id'] = f"s{src_item['index']}_{element['stream_id']}"
                                     elif 'series_id' in element:
@@ -275,13 +300,9 @@ def xtream_deep_gateway_api():
                 except Exception:
                     continue
             return jsonify(aggregated_payload)
-        except Exception as system_exc:
-            logger.error(f"خطأ عميق أثناء دمج بيانات الـ API: {str(system_exc)}")
-            with cache_lock:
-                _DEEP_CACHE_STORAGE["error_counter"] += 1
+        except Exception:
             return jsonify([])
 
-    # رد تسجيل الدخول الأساسي العميق المتوافق 100% مع جميع تطبيقات الـ IPTV
     login_response_packet = {
         "user_info": {
             "username": usr,
@@ -289,7 +310,7 @@ def xtream_deep_gateway_api():
             "status": "Active",
             "exp_date": "1893456000",
             "is_trial": "0",
-            "active_cons": str(subscriber_profile['current_active_connections']),
+            "active_cons": "1",
             "max_connections": str(subscriber_profile['max_connections'])
         },
         "server_info": {
@@ -302,21 +323,20 @@ def xtream_deep_gateway_api():
     return jsonify(login_response_packet)
 
 # ==============================================================================
-# 5. محرك تسيير وإعادة توجيه البث فائق الذكاء العميق (Deep Smart Stream Dispatcher)
+# 4. محرك توجيه وإعادة توجيه البث (Smart Stream Dispatcher)
 # ==============================================================================
 @app.route('/live/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/movie/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/series/<usr>/<pwd>/<path:stream_subpath>')
-def deep_ultimate_stream_redirection_engine(usr, pwd, stream_subpath):
+def interactive_stream_redirection(usr, pwd, stream_subpath):
     subscriber_profile = SUBSCRIBERS_DB.get(usr)
     if not subscriber_profile or subscriber_profile['password'] != pwd:
-        return "Unauthorized Deep Stream Access", 401
+        return "Unauthorized Stream Access", 401
         
-    valid_sources = fetch_and_filter_active_sources_deep()
+    valid_sources = fetch_and_filter_active_interactive()
     selected_target_source = valid_sources[0] if valid_sources else None
     unpacked_stream_path = stream_subpath
     
-    # فك المعرف المدمج لمعرفة المصدر الأصلي وتوجيه الطلب إليه مباشرة بدرجة عمق قصوى
     if stream_subpath.startswith("s") and "_" in stream_subpath:
         try:
             tokens = stream_subpath.split("_", 1)
@@ -334,14 +354,11 @@ def deep_ultimate_stream_redirection_engine(usr, pwd, stream_subpath):
         destination_url = f"{selected_target_source['dns']}/{media_category}/{selected_target_source['username']}/{selected_target_source['password']}/{unpacked_stream_path}"
         return redirect(destination_url, code=302)
         
-    return "No Active Deep Upstream Sources Available", 503
+    return "No Active Upstream Sources Available", 503
 
-# ==============================================================================
-# 6. مسارات فحص الصحة والسلامة للمنصات السحابية العميق (Health Check Endpoints)
-# ==============================================================================
 @app.route('/health')
 @app.route('/actuator/health')
-def cloud_deployment_deep_health_probe():
+def health_probe():
     return "OK", 200
 
 if __name__ == '__main__':
