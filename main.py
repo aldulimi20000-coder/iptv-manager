@@ -10,14 +10,14 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (STREAM_CHUNK_FIX) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (PORT_FIX) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_STREAM_CHUNK")
+logger = logging.getLogger("IPTV_PORT_FIX")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_chunk_fix_2026")
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_port_fix_2026")
 TIMEOUT_LIMIT = 20
 CACHE_TTL = 300
 cache_lock = threading.Lock()
@@ -230,7 +230,7 @@ def web_control_panel():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة التحكم السحابية الكاملة - IPTV Web Master</title>
+        <title>لوحة التحكم بنظام Xtream API</title>
         <style>
             :root {{ --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; --border: #1e293b; }}
             body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
@@ -247,4 +247,220 @@ def web_control_panel():
             input, select {{ width: 100%; padding: 10px; margin: 8px 0; background: #020617; border: 1px solid var(--border); color: white; border-radius: 8px; box-sizing: border-box; }}
             button {{ background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }}
             button:hover {{ opacity: 0.9; }}
-            button.danger {{ background:
+            button.danger {{ background: var(--danger); }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 600px; }}
+            th, td {{ padding: 12px; text-align: right; border-bottom: 1px solid var(--border); font-size: 13px; }}
+            th {{ color: var(--accent); background: var(--border); }}
+            .badge {{ background: var(--accent); color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>⚡ لوحة التحكم بنظام Xtream API</h1>
+                <p>إدارة المشتركين والمصادر للعمل مباشرة عبر بروتوكول Xtream Codes API</p>
+            </header>
+            
+            <div class="url-box">
+                <p style="margin:0 0 8px 0; color:#94a3b8; font-size:14px;">🔗 رابط السيرفر الأساسي (URL) لاستخدامه في تطبيق الـ IPTV:</p>
+                <code>{current_server_url}</code>
+            </div>
+
+            {'<div class="alert">' + message + '</div>' if message else ''}
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>📊 إحصائيات النظام والمحتوى</h3>
+                    <p>إجمالي المصادر المحفوظة: <span class="stat-val" style="color:var(--accent);">{len(sources_list)}</span></p>
+                    <p>المصادر النشطة والشغالة: <span class="stat-val">{len(active_sources_list)}</span></p>
+                    <p>إجمالي القنوات المباشرة: <span class="stat-val" style="color:#f59e0b;">{_WEB_CACHE['total_channels']}</span></p>
+                    <p>إجمالي أفلام الـ VOD: <span class="stat-val" style="color:#38bdf8;">{_WEB_CACHE['total_movies']}</span></p>
+                    <p>إجمالي المسلسلات: <span class="stat-val" style="color:#a855f7;">{_WEB_CACHE['total_series']}</span></p>
+                </div>
+
+                <div class="card">
+                    <h3>➕ إضافة مشترك جديد عبر الويب</h3>
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="add_subscriber">
+                        <input type="text" name="username" placeholder="اسم المستخدم (Username)" required>
+                        <input type="text" name="password" placeholder="كلمة المرور (Password)" required>
+                        <input type="text" name="expiry_date" placeholder="تاريخ الانتهاء (YYYY-MM-DD)" value="2026-12-31">
+                        <input type="number" name="max_connections" placeholder="عدد الأجهزة المسموحة" value="2">
+                        <button type="submit">إضافة العميل فوراً</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h3>🌐 إضافة مصدر Xtream جديد عبر الويب</h3>
+                    <form method="POST">
+                        <input type="hidden" name="form_type" value="add_source">
+                        <input type="text" name="dns" placeholder="رابط السيرفر (http://marveltv.info:80)" required>
+                        <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر" required>
+                        <input type="text" name="s_password" placeholder="كلمة المرور للمصدر" required>
+                        <button type="submit">حفظ المصدر وتحديث السيرفر</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📋 جدول المشتركين والتحكم المباشر</h3>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>اسم المستخدم</th>
+                                <th>كلمة المرور</th>
+                                <th>تاريخ الانتهاء</th>
+                                <th>الأجهزة</th>
+                                <th>الحالة</th>
+                                <th>إجراءات الحذف</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join([f"<tr><td><strong>{uname}</strong></td><td><code>{info.get('password', '')}</code></td><td>{info.get('expiry_date', '')}</td><td><span class='badge'>{info.get('max_connections', 1)} جهاز</span></td><td style='color:var(--success); font-weight:bold;'>{info.get('status', 'Active')}</td><td>" + (f"<form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_subscriber'><input type='hidden' name='username' value='{uname}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف</button></form>" if uname != "client_bashar" else "<span style='color:#64748b;'>حساب أساسي</span>") + "</td></tr>" for uname, info in subscribers_db.items()])}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:25px;">
+                <h3>🌐 جدول مصادر الـ Xtream المحفوظة في السيرفر</h3>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الرقم</th>
+                                <th>رابط السيرفر (DNS)</th>
+                                <th>اسم المستخدم</th>
+                                <th>إجراءات الحذف</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join([f"<tr><td>{i+1}</td><td><code>{src.get('dns', '')}</code></td><td>{src.get('username', '')}</td><td><form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_source'><input type='hidden' name='source_index' value='{i}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف المصدر</button></form></td></tr>" for i, src in enumerate(sources_list)]) if sources_list else "<tr><td colspan='4' style='text-align:center; color:#94a3b8;'>لا توجد مصادر مضافة حالياً. أضف مصدراً عبر نموذج الويب في الأعلى!</td></tr>"}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(dashboard_html)
+
+@app.route('/player_api.php')
+def xtream_web_gateway():
+    usr = request.args.get('username')
+    pwd = request.args.get('password')
+    act = request.args.get('action')
+    
+    subscribers_db = load_subs_json()
+    subscriber_profile = subscribers_db.get(usr)
+    if not subscriber_profile or subscriber_profile.get('password'] != pwd or subscriber_profile.get('status') != "Active":
+        return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
+        
+    valid_sources = fetch_and_filter_active()
+    
+    if act and valid_sources:
+        try:
+            aggregated_payload = []
+            for src_item in valid_sources:
+                upstream_endpoint = f"{src_item['dns']}/player_api.php?username={src_item['username']}&password={src_item['password']}&action={act}"
+                for query_key, query_val in request.args.items():
+                    if query_key not in ['username', 'password']:
+                        upstream_endpoint += f"&{query_key}={query_val}"
+                
+                try:
+                    upstream_resp = requests.get(upstream_endpoint, timeout=TIMEOUT_LIMIT)
+                    if upstream_resp.status_code == 200:
+                        json_content = upstream_resp.json()
+                        if isinstance(json_content, list):
+                            for element in json_content:
+                                if isinstance(element, dict):
+                                    if 'stream_id' in element:
+                                        element['stream_id'] = f"s{src_item['index']}_{element['stream_id']}"
+                                    elif 'series_id' in element:
+                                        element['series_id'] = f"s{src_item['index']}_{element['series_id']}"
+                                    elif 'category_id' in element:
+                                        element['category_id'] = f"s{src_item['index']}_{element['category_id']}"
+                                    aggregated_payload.append(element)
+                        elif isinstance(json_content, dict):
+                            return jsonify(json_content)
+                except Exception:
+                    continue
+            return jsonify(aggregated_payload)
+        except Exception:
+            return jsonify([])
+
+    login_response_packet = {
+        "user_info": {
+            "username": usr,
+            "password": pwd,
+            "status": "Active",
+            "exp_date": "1893456000",
+            "is_trial": "0",
+            "active_cons": "1",
+            "max_connections": str(subscriber_profile.get('max_connections', 2))
+        },
+        "server_info": {
+            "url": request.host_url.rstrip('/').replace('https://', 'http://'),
+            "port": os.environ.get("PORT", "1500"),
+            "https_port": "443",
+            "server_protocol": "http"
+        }
+    }
+    return jsonify(login_response_packet)
+
+@app.route('/live/<usr>/<pwd>/<path:stream_subpath>')
+@app.route('/movie/<usr>/<pwd>/<path:stream_subpath>')
+@app.route('/series/<usr>/<pwd>/<path:stream_subpath>')
+def web_stream_proxy(usr, pwd, stream_subpath):
+    subscribers_db = load_subs_json()
+    subscriber_profile = subscribers_db.get(usr)
+    if not subscriber_profile or subscriber_profile.get('password') != pwd:
+        return "Unauthorized Stream Access", 401
+        
+    valid_sources = fetch_and_filter_active()
+    selected_target_source = valid_sources[0] if valid_sources else None
+    unpacked_stream_path = stream_subpath
+    
+    if stream_subpath.startswith("s") and "_" in stream_subpath:
+        try:
+            tokens = stream_subpath.split("_", 1)
+            target_source_idx = int(tokens[0][1:])
+            unpacked_stream_path = tokens[1]
+            for candidate in valid_sources:
+                if candidate['index'] == target_source_idx:
+                    selected_target_source = candidate
+                    break
+        except Exception:
+            pass
+            
+    if selected_target_source:
+        media_category = request.path.split('/')[1]
+        destination_url = f"{selected_target_source['dns']}/{media_category}/{selected_target_source['username']}/{selected_target_source['password']}/{unpacked_stream_path}"
+        
+        try:
+            upstream_req = requests.get(destination_url, stream=True, timeout=30)
+            def generate():
+                for chunk in upstream_req.iter_content(chunk_size=16384):
+                    if chunk:
+                        yield chunk
+            return Response(
+                generate(),
+                status=upstream_req.status_code,
+                content_type=upstream_req.headers.get('content-type', 'video/mp2t'),
+                direct_passthrough=True
+            )
+        except Exception as e:
+            return f"Stream Error: {str(e)}", 502
+        
+    return "No Active Upstream Sources Available", 503
+
+@app.route('/health')
+@app.route('/actuator/health')
+def health_probe():
+    return "OK", 200
+
+if __name__ == '__main__':
+    port_val = int(os.environ.get("PORT", 1500))
+    app.run(host='0.0.0.0', port=port_val)
