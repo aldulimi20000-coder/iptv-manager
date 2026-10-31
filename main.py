@@ -26,45 +26,66 @@ SOURCES_FILE = "sources.json"
 SUBS_FILE = "subscribers.json"
 
 def init_storage():
-    if not os.path.exists(SOURCES_FILE):
-        with open(SOURCES_FILE, "w", encoding="utf-8") as f:
-            json.dump([], f)
-    if not os.path.exists(SUBS_FILE):
-        default_subs = {
-            "client_bashar": {
-                "password": "123",
-                "expiry_date": "2026-12-31",
-                "max_connections": 5,
-                "allowed_device": "Android TV / TiviMate / IPTV Smarters",
-                "status": "Active"
+    try:
+        if not os.path.exists(SOURCES_FILE):
+            with open(SOURCES_FILE, "w", encoding="utf-8") as f:
+                json.dump([], f)
+        if not os.path.exists(SUBS_FILE):
+            default_subs = {
+                "client_bashar": {
+                    "password": "123",
+                    "expiry_date": "2026-12-31",
+                    "max_connections": 5,
+                    "allowed_device": "Android TV / TiviMate / IPTV Smarters",
+                    "status": "Active"
+                }
             }
-        }
-        with open(SUBS_FILE, "w", encoding="utf-8") as f:
-            json.dump(default_subs, f, ensure_ascii=False, indent=4)
+            with open(SUBS_FILE, "w", encoding="utf-8") as f:
+                json.dump(default_subs, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"خطأ في تهيئة التخزين: {str(e)}")
 
 init_storage()
 
 def load_sources_json():
     try:
-        with open(SOURCES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        if os.path.exists(SOURCES_FILE):
+            with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
     except Exception:
-        return []
+        pass
+    return []
 
 def save_sources_json(sources):
-    with open(SOURCES_FILE, "w", encoding="utf-8") as f:
-        json.dump(sources, f, ensure_ascii=False, indent=4)
+    try:
+        with open(SOURCES_FILE, "w", encoding="utf-8") as f:
+            json.dump(sources, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"خطأ في حفظ المصادر: {str(e)}")
 
 def load_subs_json():
     try:
-        with open(SUBS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        if os.path.exists(SUBS_FILE):
+            with open(SUBS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
     except Exception:
-        return {}
+        pass
+    return {
+        "client_bashar": {
+            "password": "123",
+            "expiry_date": "2026-12-31",
+            "max_connections": 5,
+            "allowed_device": "Android TV / TiviMate",
+            "status": "Active"
+        }
+    }
 
 def save_subs_json(subs):
-    with open(SUBS_FILE, "w", encoding="utf-8") as f:
-        json.dump(subs, f, ensure_ascii=False, indent=4)
+    try:
+        with open(SUBS_FILE, "w", encoding="utf-8") as f:
+            json.dump(subs, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"خطأ في حفظ المشتركين: {str(e)}")
 
 _WEB_CACHE = {
     "active_sources": [],
@@ -132,58 +153,64 @@ def web_control_panel():
     sources_list = load_sources_json()
 
     if request.method == 'POST':
-        form_type = request.form.get('form_type')
-        
-        if form_type == 'add_subscriber':
-            new_user = request.form.get('username').strip()
-            new_pass = request.form.get('password').strip()
-            new_exp = request.form.get('expiry_date').strip()
-            new_max = int(request.form.get('max_connections', 2))
+        try:
+            form_type = request.form.get('form_type')
             
-            if new_user and new_pass:
-                subscribers_db[new_user] = {
-                    "password": new_pass,
-                    "expiry_date": new_exp if new_exp else "2026-12-31",
-                    "max_connections": new_max,
-                    "allowed_device": "All IPTV Devices",
-                    "status": "Active"
-                }
-                save_subs_json(subscribers_db)
-                message = f"تم إضافة المشترك ({new_user}) بنجاح عبر لوحة الويب!"
+            if form_type == 'add_subscriber':
+                new_user = request.form.get('username', '').strip()
+                new_pass = request.form.get('password', '').strip()
+                new_exp = request.form.get('expiry_date', '2026-12-31').strip()
+                max_conn_str = request.form.get('max_connections', '2').strip()
+                new_max = int(max_conn_str) if max_conn_str.isdigit() else 2
+                
+                if new_user and new_pass:
+                    subscribers_db[new_user] = {
+                        "password": new_pass,
+                        "expiry_date": new_exp if new_exp else "2026-12-31",
+                        "max_connections": new_max,
+                        "allowed_device": "All IPTV Devices",
+                        "status": "Active"
+                    }
+                    save_subs_json(subscribers_db)
+                    message = f"تم إضافة المشترك ({new_user}) بنجاح عبر لوحة الويب!"
+                else:
+                    message = "خطأ: اسم المستخدم وكلمة المرور إجباريان!"
 
-        elif form_type == 'delete_subscriber':
-            target_user = request.form.get('username')
-            if target_user in subscribers_db and target_user != "client_bashar":
-                del subscribers_db[target_user]
-                save_subs_json(subscribers_db)
-                message = f"تم حذف المشترك ({target_user}) بنجاح!"
+            elif form_type == 'delete_subscriber':
+                target_user = request.form.get('username')
+                if target_user in subscribers_db and target_user != "client_bashar":
+                    del subscribers_db[target_user]
+                    save_subs_json(subscribers_db)
+                    message = f"تم حذف المشترك ({target_user}) بنجاح!"
 
-        elif form_type == 'add_source':
-            new_dns = request.form.get('dns').strip()
-            new_usr = request.form.get('s_username').strip()
-            new_pwd = request.form.get('s_password').strip()
-            if new_dns and new_usr and new_pwd:
-                sources_list.append({
-                    "dns": new_dns,
-                    "username": new_usr,
-                    "password": new_pwd
-                })
-                save_sources_json(sources_list)
-                with cache_lock:
-                    _WEB_CACHE["last_updated"] = 0
-                message = "تم إضافة مصدر الـ Xtream وحفظه في السيرفر بنجاح!"
-
-        elif form_type == 'delete_source':
-            try:
-                src_idx = int(request.form.get('source_index'))
-                if 0 <= src_idx < len(sources_list):
-                    sources_list.pop(src_idx)
+            elif form_type == 'add_source':
+                new_dns = request.form.get('dns', '').strip()
+                new_usr = request.form.get('s_username', '').strip()
+                new_pwd = request.form.get('s_password', '').strip()
+                if new_dns and new_usr and new_pwd:
+                    sources_list.append({
+                        "dns": new_dns,
+                        "username": new_usr,
+                        "password": new_pwd
+                    })
                     save_sources_json(sources_list)
                     with cache_lock:
                         _WEB_CACHE["last_updated"] = 0
-                    message = "تم حذف المصدر بنجاح!"
-            except Exception:
-                pass
+                    message = "تم إضافة مصدر الـ Xtream وحفظه في السيرفر بنجاح!"
+
+            elif form_type == 'delete_source':
+                try:
+                    src_idx = int(request.form.get('source_index', -1))
+                    if 0 <= src_idx < len(sources_list):
+                        sources_list.pop(src_idx)
+                        save_sources_json(sources_list)
+                        with cache_lock:
+                            _WEB_CACHE["last_updated"] = 0
+                        message = "تم حذف المصدر بنجاح!"
+                except Exception:
+                    pass
+        except Exception as err:
+            message = f"حدث خطأ أثناء معالجة الطلب: {str(err)}"
 
     active_sources_list = fetch_and_filter_active()
     current_server_url = request.host_url.rstrip('/')
@@ -281,7 +308,7 @@ def web_control_panel():
                             </tr>
                         </thead>
                         <tbody>
-                            {''.join([f"<tr><td><strong>{uname}</strong></td><td><code>{info['password']}</code></td><td>{info['expiry_date']}</td><td><span class='badge'>{info['max_connections']} جهاز</span></td><td style='color:var(--success); font-weight:bold;'>{info['status']}</td><td>" + (f"<form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_subscriber'><input type='hidden' name='username' value='{uname}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف</button></form>" if uname != "client_bashar" else "<span style='color:#64748b;'>حساب أساسي</span>") + "</td></tr>" for uname, info in subscribers_db.items()])}
+                            {''.join([f"<tr><td><strong>{uname}</strong></td><td><code>{info.get('password', '')}</code></td><td>{info.get('expiry_date', '')}</td><td><span class='badge'>{info.get('max_connections', 1)} جهاز</span></td><td style='color:var(--success); font-weight:bold;'>{info.get('status', 'Active')}</td><td>" + (f"<form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_subscriber'><input type='hidden' name='username' value='{uname}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف</button></form>" if uname != "client_bashar" else "<span style='color:#64748b;'>حساب أساسي</span>") + "</td></tr>" for uname, info in subscribers_db.items()])}
                         </tbody>
                     </table>
                 </div>
@@ -300,7 +327,7 @@ def web_control_panel():
                             </tr>
                         </thead>
                         <tbody>
-                            {''.join([f"<tr><td>{i+1}</td><td><code>{src['dns']}</code></td><td>{src['username']}</td><td><form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_source'><input type='hidden' name='source_index' value='{i}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف المصدر</button></form></td></tr>" for i, src in enumerate(sources_list)]) if sources_list else "<tr><td colspan='4' style='text-align:center; color:#94a3b8;'>لا توجد مصادر مضافة حالياً. أضف مصدراً عبر نموذج الويب في الأعلى!</td></tr>"}
+                            {''.join([f"<tr><td>{i+1}</td><td><code>{src.get('dns', '')}</code></td><td>{src.get('username', '')}</td><td><form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_source'><input type='hidden' name='source_index' value='{i}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف المصدر</button></form></td></tr>" for i, src in enumerate(sources_list)]) if sources_list else "<tr><td colspan='4' style='text-align:center; color:#94a3b8;'>لا توجد مصادر مضافة حالياً. أضف مصدراً عبر نموذج الويب في الأعلى!</td></tr>"}
                         </tbody>
                     </table>
                 </div>
@@ -319,7 +346,7 @@ def xtream_web_gateway():
     
     subscribers_db = load_subs_json()
     subscriber_profile = subscribers_db.get(usr)
-    if not subscriber_profile or subscriber_profile['password'] != pwd or subscriber_profile.get('status') != "Active":
+    if not subscriber_profile or subscriber_profile.get('password') != pwd or subscriber_profile.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
     valid_sources = fetch_and_filter_active()
@@ -355,7 +382,6 @@ def xtream_web_gateway():
         except Exception:
             return jsonify([])
 
-    # التعديل الهام هنا لتوافق المنصة الخارجية وعدم طردك من التطبيق:
     login_response_packet = {
         "user_info": {
             "username": usr,
@@ -364,7 +390,7 @@ def xtream_web_gateway():
             "exp_date": "1893456000",
             "is_trial": "0",
             "active_cons": "1",
-            "max_connections": str(subscriber_profile['max_connections'])
+            "max_connections": str(subscriber_profile.get('max_connections', 2))
         },
         "server_info": {
             "url": request.host_url.rstrip('/').replace('https://', 'http://'),
@@ -381,7 +407,7 @@ def xtream_web_gateway():
 def web_stream_redirection(usr, pwd, stream_subpath):
     subscribers_db = load_subs_json()
     subscriber_profile = subscribers_db.get(usr)
-    if not subscriber_profile or subscriber_profile['password'] != pwd:
+    if not subscriber_profile or subscriber_profile.get('password') != pwd:
         return "Unauthorized Stream Access", 401
         
     valid_sources = fetch_and_filter_active()
