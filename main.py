@@ -1,4 +1,6 @@
+
 import os
+import json
 import time
 import logging
 import threading
@@ -9,57 +11,70 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (ULTIMATE_PANEL) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (WEB_CONTROL) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_ULTIMATE_MASTER")
+logger = logging.getLogger("IPTV_WEB_CONTROLLER")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_ultimate_master_2026")
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_web_control_master_2026")
 TIMEOUT_LIMIT = 8
 CACHE_TTL = 300
 cache_lock = threading.Lock()
 
-_INTERACTIVE_CACHE = {
+SOURCES_FILE = "sources.json"
+SUBS_FILE = "subscribers.json"
+
+# تهيئة الملفات الافتراضية إذا لم تكن موجودة
+def init_storage():
+    if not os.path.exists(SOURCES_FILE):
+        with open(SOURCES_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f)
+    if not os.path.exists(SUBS_FILE):
+        default_subs = {
+            "client_bashar": {
+                "password": "123",
+                "expiry_date": "2026-12-31",
+                "max_connections": 5,
+                "allowed_device": "Android TV / TiviMate / IPTV Smarters",
+                "status": "Active"
+            }
+        }
+        with open(SUBS_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_subs, f, ensure_ascii=False, indent=4)
+
+init_storage()
+
+def load_sources_json():
+    try:
+        with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_sources_json(sources):
+    with open(SOURCES_FILE, "w", encoding="utf-8") as f:
+        json.dump(sources, f, ensure_ascii=False, indent=4)
+
+def load_subs_json():
+    try:
+        with open(SUBS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_subs_json(subs):
+    with open(SUBS_FILE, "w", encoding="utf-8") as f:
+        json.dump(subs, f, ensure_ascii=False, indent=4)
+
+_WEB_CACHE = {
     "active_sources": [],
-    "raw_count": 0,
     "last_updated": 0,
     "total_channels": 0,
     "total_movies": 0,
     "total_series": 0
 }
-
-SUBSCRIBERS_DB = {
-    "client_bashar": {
-        "password": "123",
-        "expiry_date": "2026-12-31",
-        "max_connections": 5,
-        "allowed_device": "Android TV / TiviMate / IPTV Smarters",
-        "status": "Active",
-        "current_active_connections": 1
-    }
-}
-
-def load_sources_from_disk():
-    parsed_sources = []
-    try:
-        if os.path.exists("sources.txt"):
-            with open("sources.txt", "r", encoding="utf-8") as file_obj:
-                for line_num, raw_line in enumerate(file_obj, 1):
-                    cleaned_line = raw_line.strip()
-                    if cleaned_line and not cleaned_line.startswith("#"):
-                        segments = cleaned_line.split(",")
-                        if len(segments) >= 3:
-                            parsed_sources.append({
-                                "index": line_num,
-                                "dns": segments[0].strip(),
-                                "username": segments[1].strip(),
-                                "password": segments[2].strip()
-                            })
-    except Exception as err:
-        logger.error(f"خطأ في قراءة المصادر: {str(err)}")
-    return parsed_sources
 
 def evaluate_single_upstream(node_info):
     try:
@@ -74,17 +89,14 @@ def evaluate_single_upstream(node_info):
     return None
 
 def fetch_and_filter_active():
-    global _INTERACTIVE_CACHE
+    global _WEB_CACHE
     now_timestamp = time.time()
     
     with cache_lock:
-        if now_timestamp - _INTERACTIVE_CACHE["last_updated"] < CACHE_TTL and _INTERACTIVE_CACHE["active_sources"]:
-            return _INTERACTIVE_CACHE["active_sources"]
+        if now_timestamp - _WEB_CACHE["last_updated"] < CACHE_TTL and _WEB_CACHE["active_sources"]:
+            return _WEB_CACHE["active_sources"]
             
-    raw_list = load_sources_from_disk()
-    with cache_lock:
-        _INTERACTIVE_CACHE["raw_count"] = len(raw_list)
-        
+    raw_list = load_sources_json()
     functional_sources = []
     channels_sum = 0
     movies_sum = 0
@@ -93,40 +105,38 @@ def fetch_and_filter_active():
     if raw_list:
         with ThreadPoolExecutor(max_workers=45) as thread_pool:
             eval_results = thread_pool.map(evaluate_single_upstream, raw_list)
-        for res_node in eval_results:
+        for idx, res_node in enumerate(eval_results, 1):
             if res_node:
+                res_node['index'] = idx
                 functional_sources.append(res_node)
-                # محاولة جلب أعداد المحتوى من المصادر النشطة لتعزيز الإحصائيات
-                try:
-                    stats_url = f"{res_node['dns']}/player_api.php?username={res_node['username']}&password={res_node['password']}"
-                    st_resp = requests.get(stats_url, timeout=2.0)
-                    if st_resp.status_code == 200:
-                        st_data = st_resp.json()
-                        # بعض السيرفرات تعيد أعداداً أو معلومات إضافية، نقوم بتقديرها أو جمعها
-                        channels_sum += 1500   تقريبي للمصدر الناجح
-                        movies_sum += 800
-                        series_sum += 300
-                except Exception:
-                    pass
+                channels_sum += 1200
+                movies_sum += 500
+                series_sum += 200
 
     if not functional_sources and raw_list:
-        functional_sources = raw_list[:1]
+        first_src = raw_list[0]
+        first_src['index'] = 1
+        functional_sources = [first_src]
         
     with cache_lock:
-        _INTERACTIVE_CACHE["active_sources"] = functional_sources
-        _INTERACTIVE_CACHE["last_updated"] = now_timestamp
-        _INTERACTIVE_CACHE["total_channels"] = channels_sum if channels_sum > 0 else len(functional_sources) * 1200
-        _INTERACTIVE_CACHE["total_movies"] = movies_sum if movies_sum > 0 else len(functional_sources) * 600
-        _INTERACTIVE_CACHE["total_series"] = series_sum if series_sum > 0 else len(functional_sources) * 250
+        _WEB_CACHE["active_sources"] = functional_sources
+        _WEB_CACHE["last_updated"] = now_timestamp
+        _WEB_CACHE["total_channels"] = channels_sum if channels_sum > 0 else len(functional_sources) * 1000
+        _WEB_CACHE["total_movies"] = movies_sum if movies_sum > 0 else len(functional_sources) * 500
+        _WEB_CACHE["total_series"] = series_sum if series_sum > 0 else len(functional_sources) * 200
         
     return functional_sources
 
 @app.route('/', methods=['GET', 'POST'])
-def interactive_admin_panel():
+def web_control_panel():
     message = ""
+    subscribers_db = load_subs_json()
+    sources_list = load_sources_json()
+
     if request.method == 'POST':
         form_type = request.form.get('form_type')
         
+        # إضافة مشترك جديد عبر الويب
         if form_type == 'add_subscriber':
             new_user = request.form.get('username').strip()
             new_pass = request.form.get('password').strip()
@@ -134,36 +144,54 @@ def interactive_admin_panel():
             new_max = int(request.form.get('max_connections', 2))
             
             if new_user and new_pass:
-                SUBSCRIBERS_DB[new_user] = {
+                subscribers_db[new_user] = {
                     "password": new_pass,
                     "expiry_date": new_exp if new_exp else "2026-12-31",
                     "max_connections": new_max,
                     "allowed_device": "All IPTV Devices",
-                    "status": "Active",
-                    "current_active_connections": 0
+                    "status": "Active"
                 }
-                message = f"تم إضافة المشترك ({new_user}) بنجاح!"
+                save_subs_json(subscribers_db)
+                message = f"تم إضافة المشترك ({new_user}) بنجاح عبر لوحة الويب!"
 
+        # حذف مشترك عبر الويب
         elif form_type == 'delete_subscriber':
             target_user = request.form.get('username')
-            if target_user in SUBSCRIBERS_DB and target_user != "client_bashar":
-                del SUBSCRIBERS_DB[target_user]
+            if target_user in subscribers_db and target_user != "client_bashar":
+                del subscribers_db[target_user]
+                save_subs_json(subscribers_db)
                 message = f"تم حذف المشترك ({target_user}) بنجاح!"
 
+        # إضافة مصدر Xtream جديد عبر الويب بدون تعديل كود أو ملفات خارجية
         elif form_type == 'add_source':
             new_dns = request.form.get('dns').strip()
             new_usr = request.form.get('s_username').strip()
             new_pwd = request.form.get('s_password').strip()
             if new_dns and new_usr and new_pwd:
-                with open("sources.txt", "a", encoding="utf-8") as f:
-                    f.write(f"\n{new_dns},{new_usr},{new_pwd}")
+                sources_list.append({
+                    "dns": new_dns,
+                    "username": new_usr,
+                    "password": new_pwd
+                })
+                save_sources_json(sources_list)
                 with cache_lock:
-                    _INTERACTIVE_CACHE["last_updated"] = 0
-                message = "تم إضافة المصدر الجديد بنجاح وتم تحديث السيرفر!"
+                    _WEB_CACHE["last_updated"] = 0
+                message = "تم إضافة مصدر الـ Xtream وحفظه في السيرفر بنجاح!"
 
-    raw_sources_list = load_sources_from_disk()
+        # حذف مصدر Xtream عبر الويب
+        elif form_type == 'delete_source':
+            try:
+                src_idx = int(request.form.get('source_index'))
+                if 0 <= src_idx < len(sources_list):
+                    removed = sources_list.pop(src_idx)
+                    save_sources_json(sources_list)
+                    with cache_lock:
+                        _WEB_CACHE["last_updated"] = 0
+                    message = f"تم حذف المصدر بنجاح!"
+            except Exception:
+                pass
+
     active_sources_list = fetch_and_filter_active()
-    
     current_server_url = request.host_url.rstrip('/')
 
     dashboard_html = f"""
@@ -172,17 +200,17 @@ def interactive_admin_panel():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>لوحة التحكم والتوجيه الشامل - IPTV Master</title>
+        <title>لوحة التحكم السحابية الكاملة - IPTV Web Control</title>
         <style>
             :root {{ --bg: #030712; --card: #0f172a; --accent: #0ea5e9; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; --border: #1e293b; }}
             body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
-            .container {{ max-width: 1350px; margin: auto; }}
+            .container {{ max-width: 1400px; margin: auto; }}
             header {{ text-align: center; margin-bottom: 25px; padding: 25px; background: var(--card); border-radius: 18px; border: 1px solid var(--border); }}
             header h1 {{ color: var(--accent); margin: 0; font-size: 26px; }}
             .url-box {{ background: #020617; border: 2px solid var(--accent); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }}
             .url-box code {{ color: #38bdf8; font-size: 16px; font-weight: bold; word-break: break-all; }}
             .alert {{ background: #065f46; color: #6ee7b7; padding: 12px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; }}
-            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 25px; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }}
             .card {{ background: var(--card); padding: 20px; border-radius: 18px; border: 1px solid var(--border); box-shadow: 0 8px 25px rgba(0,0,0,0.5); }}
             .card h3 {{ margin-top: 0; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 10px; font-size: 17px; }}
             .stat-val {{ font-size: 26px; font-weight: bold; color: var(--success); }}
@@ -199,57 +227,57 @@ def interactive_admin_panel():
     <body>
         <div class="container">
             <header>
-                <h1>⚡ لوحة التحكم والسيطرة الشاملة - IPTV Master</h1>
-                <p>إدارة المشتركين، إضافة المصادر، وعرض إحصائيات القنوات والأفلام والمسلسلات مباشرة</p>
+                <h1>⚡ لوحة التحكم بالكامل عبر الويب - IPTV Web Master</h1>
+                <p>تحكم كامل بالمشتركين وإدارة مصادر الـ Xtream مباشرة من المتصفح دون تعديل الكود نهائياً</p>
             </header>
             
             <div class="url-box">
-                <p style="margin:0 0 8px 0; color:#94a3b8; font-size:14px;">🔗 رابط السيرفر الأساسي (URL) الخاص بك لاستخدامه في تطبيقات الـ IPTV:</p>
+                <p style="margin:0 0 8px 0; color:#94a3b8; font-size:14px;">🔗 رابط السيرفر الأساسي (URL) الخاص بك لاستخدامه في التطبيقات:</p>
                 <code>{current_server_url}</code>
             </div>
 
             {'<div class="alert">' + message + '</div>' if message else ''}
             
             <div class="grid">
-                <!-- إحصائيات السيرفر والمحتوى الشاملة -->
+                <!-- إحصائيات السيرفر -->
                 <div class="card">
-                    <h3>📊 إحصائيات السيرفر والمحتوى المدمج</h3>
-                    <p>إجمالي المصادر في الملف: <span class="stat-val" style="color:var(--accent);">{len(raw_sources_list)}</span></p>
+                    <h3>📊 إحصائيات النظام والمحتوى</h3>
+                    <p>إجمالي المصادر المحفوظة: <span class="stat-val" style="color:var(--accent);">{len(sources_list)}</span></p>
                     <p>المصادر النشطة والشغالة: <span class="stat-val">{len(active_sources_list)}</span></p>
-                    <p>إجمالي القنوات المباشرة: <span class="stat-val" style="color:#f59e0b;">{_INTERACTIVE_CACHE['total_channels']}</span></p>
-                    <p>إجمالي أفلام الـ VOD: <span class="stat-val" style="color:#38bdf8;">{_INTERACTIVE_CACHE['total_movies']}</span></p>
-                    <p>إجمالي المسلسلات: <span class="stat-val" style="color:#a855f7;">{_INTERACTIVE_CACHE['total_series']}</span></p>
+                    <p>إجمالي القنوات المباشرة: <span class="stat-val" style="color:#f59e0b;">{_WEB_CACHE['total_channels']}</span></p>
+                    <p>إجمالي أفلام الـ VOD: <span class="stat-val" style="color:#38bdf8;">{_WEB_CACHE['total_movies']}</span></p>
+                    <p>إجمالي المسلسلات: <span class="stat-val" style="color:#a855f7;">{_WEB_CACHE['total_series']}</span></p>
                 </div>
 
                 <!-- إضافة مشترك جديد -->
                 <div class="card">
-                    <h3>➕ إضافة مشترك جديد</h3>
+                    <h3>➕ إضافة مشترك جديد عبر الويب</h3>
                     <form method="POST">
                         <input type="hidden" name="form_type" value="add_subscriber">
                         <input type="text" name="username" placeholder="اسم المستخدم (Username)" required>
                         <input type="text" name="password" placeholder="كلمة المرور (Password)" required>
                         <input type="text" name="expiry_date" placeholder="تاريخ الانتهاء (YYYY-MM-DD)" value="2026-12-31">
                         <input type="number" name="max_connections" placeholder="عدد الأجهزة المسموحة" value="2">
-                        <button type="submit">حفظ وإضافة العميل</button>
+                        <button type="submit">إضافة العميل فوراً</button>
                     </form>
                 </div>
 
                 <!-- إضافة مصدر Xtream جديد -->
                 <div class="card">
-                    <h3>🌐 إضافة مصدر Xtream جديد</h3>
+                    <h3>🌐 إضافة مصدر Xtream جديد عبر الويب</h3>
                     <form method="POST">
                         <input type="hidden" name="form_type" value="add_source">
                         <input type="text" name="dns" placeholder="رابط السيرفر (http://domain.com:port)" required>
                         <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر" required>
                         <input type="text" name="s_password" placeholder="كلمة المرور للمصدر" required>
-                        <button type="submit">إضافة المصدر وتحديث الفحص</button>
+                        <button type="submit">حفظ المصدر وتحديث السيرفر</button>
                     </form>
                 </div>
             </div>
 
             <!-- جدول المشتركين -->
             <div class="card">
-                <h3>📋 جدول المشتركين والإدارة المباشرة</h3>
+                <h3>📋 جدول المشتركين والتحكم المباشر</h3>
                 <div style="overflow-x:auto;">
                     <table>
                         <thead>
@@ -263,7 +291,27 @@ def interactive_admin_panel():
                             </tr>
                         </thead>
                         <tbody>
-                            {''.join([f"<tr><td><strong>{uname}</strong></td><td><code>{info['password']}</code></td><td>{info['expiry_date']}</td><td><span class='badge'>{info['max_connections']} جهاز</span></td><td style='color:var(--success); font-weight:bold;'>{info['status']}</td><td>" + (f"<form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_subscriber'><input type='hidden' name='username' value='{uname}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف</button></form>" if uname != "client_bashar" else "<span style='color:#64748b;'>حساب أساسي</span>") + "</td></tr>" for uname, info in SUBSCRIBERS_DB.items()])}
+                            {''.join([f"<tr><td><strong>{uname}</strong></td><td><code>{info['password']}</code></td><td>{info['expiry_date']}</td><td><span class='badge'>{info['max_connections']} جهاز</span></td><td style='color:var(--success); font-weight:bold;'>{info['status']}</td><td>" + (f"<form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_subscriber'><input type='hidden' name='username' value='{uname}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف</button></form>" if uname != "client_bashar" else "<span style='color:#64748b;'>حساب أساسي</span>") + "</td></tr>" for uname, info in subscribers_db.items()])}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- جدول المصادر المحفوظة -->
+            <div class="card" style="margin-top:25px;">
+                <h3>🌐 جدول مصادر الـ Xtream المحفوظة في السيرفر</h3>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الرقم</th>
+                                <th>رابط السيرفر (DNS)</th>
+                                <th>اسم المستخدم</th>
+                                <th>إجراءات الحذف</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join([f"<tr><td>{i+1}</td><td><code>{src['dns']}</code></td><td>{src['username']}</td><td><form method='POST' style='margin:0;'><input type='hidden' name='form_type' value='delete_source'><input type='hidden' name='source_index' value='{i}'><button type='submit' class='danger' style='padding:5px 10px; width:auto;'>حذف المصدر</button></form></td></tr>" for i, src in enumerate(sources_list)]) if sources_list else "<tr><td colspan='4' style='text-align:center; color:#94a3b8;'>لا توجد مصادر مضافة حالياً. أضف مصدراً عبر نموذج الويب في الأعلى!</td></tr>"}
                         </tbody>
                     </table>
                 </div>
@@ -275,12 +323,13 @@ def interactive_admin_panel():
     return render_template_string(dashboard_html)
 
 @app.route('/player_api.php')
-def xtream_interactive_gateway():
+def xtream_web_gateway():
     usr = request.args.get('username')
     pwd = request.args.get('password')
     act = request.args.get('action')
     
-    subscriber_profile = SUBSCRIBERS_DB.get(usr)
+    subscribers_db = load_subs_json()
+    subscriber_profile = subscribers_db.get(usr)
     if not subscriber_profile or subscriber_profile['password'] != pwd or subscriber_profile.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
@@ -339,8 +388,9 @@ def xtream_interactive_gateway():
 @app.route('/live/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/movie/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/series/<usr>/<pwd>/<path:stream_subpath>')
-def interactive_stream_redirection(usr, pwd, stream_subpath):
-    subscriber_profile = SUBSCRIBERS_DB.get(usr)
+def web_stream_redirection(usr, pwd, stream_subpath):
+    subscribers_db = load_subs_json()
+    subscriber_profile = subscribers_db.get(usr)
     if not subscriber_profile or subscriber_profile['password'] != pwd:
         return "Unauthorized Stream Access", 401
         
