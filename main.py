@@ -5,39 +5,41 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# إعدادات الأمان الأساسية
 SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_supreme_ultimate_iptv_master_2026")
 TIMEOUT_LIMIT = 20
 
 # ==============================================================================
-# 1. قاعدة بيانات الـ 59 مصدر Xtream API الأصلية (ضع هنا جميع حساباتك الـ 59)
+# 1. قاعدة بيانات المصادر (قم بتعبئة بيانات سيرفرك الحقيقي هنا)
 # ==============================================================================
 UPSTREAM_SOURCES = [
-    # مثال هيكلي لكل مصدر (قم بتعبئة الـ 59 حساباً هنا بالكامل):
-    # {"id": 1, "dns": "http://server1.com:8080", "username": "user1", "password": "pass1", "active": True},
-    # {"id": 2, "dns": "http://server2.com:8080", "username": "user2", "password": "pass2", "active": True},
-    # ... حتى المصدر 59
+    # مثال واضح: ضع هنا بيانات سيرفرك الأصلي لكي يسحب منها التطبيق القنوات والأفلام
+    {
+        "id": 1, 
+        "dns": "http://your-provider-dns.com:8080", 
+        "username": "your_upstream_username", 
+        "password": "your_upstream_password", 
+        "active": True
+    },
+    # يمكنك إضافة بقية الحسابات هنا تباعاً حتى 59 مصدراً
 ]
 
 # ==============================================================================
-# 2. قاعدة بيانات المشتركين (التحكم المطلق بكافة تفاصيل العميل والاشتراك والأجهزة)
+# 2. قاعدة بيانات المشتركين (أنت من يتحكم باسم المستخدم وكلمة المرور الخاصة بك وبعملائك)
 # ==============================================================================
 SUBSCRIBERS_DB = {
-    # يمكنك إضافة وتعديل أي عميل تحتاجه هنا بنفسك:
     "client_bashar": {
-        "password": "123",                          # كلمة المرور الخاصة بالعميل
-        "expiry_date": "2026-12-31",              # تاريخ انتهاء الاشتراك بدقة مطلقة
-        "max_connections": 1,                     # عدد الأجهزة المسموحة في نفس الوقت للتطبيق
+        "password": "123",                          # كلمة المرور التي سيدخلها العميل في التطبيق
+        "expiry_date": "2026-12-31",              # تاريخ انتهاء الاشتراك
+        "max_connections": 1,                     # عدد الأجهزة المسموحة
         "allowed_device": "Android TV / TiviMate / IPTV Smarters",
         "status": "Active"
     }
 }
 
-# نظام تتبع الجلسات النشطة
 ACTIVE_SESSIONS = {}
 
 # ==============================================================================
-# 3. لوحة التحكم الإدارية المطلقة والمرئية (Admin Dashboard)
+# 3. لوحة التحكم الإدارية المرئية (Admin Dashboard)
 # ==============================================================================
 @app.route('/')
 def admin_master_dashboard():
@@ -69,7 +71,7 @@ def admin_master_dashboard():
     <body>
         <div class="container">
             <header>
-                <h1>⚡ نظام إدارة وتوحيد الـ IPTV الأقصى قوة (59 Xtream API)</h1>
+                <h1>⚡ نظام إدارة وتوحيد الـ IPTV الأقصى قوة</h1>
                 <p>إدارة مركزية كاملة لتوحيد المصادر، التحكم بالعملاء، وتوافق تام مع تطبيقات الـ IPTV</p>
             </header>
             
@@ -87,7 +89,7 @@ def admin_master_dashboard():
             </div>
 
             <div class="card">
-                <h3>📋 جدول التحكم المطلق بالعملاء، تواريخ الصلاحية، وأجهزة التطبيقات</h3>
+                <h3>📋 جدول التحكم المطلق بالعملاء وتواريخ الصلاحية</h3>
                 <table>
                     <thead>
                         <tr>
@@ -95,7 +97,6 @@ def admin_master_dashboard():
                             <th>كلمة المرور (Password)</th>
                             <th>تاريخ انتهاء الاشتراك</th>
                             <th>عدد الأجهزة المسموحة</th>
-                            <th>نوع الجهاز المعتمد</th>
                             <th>الحالة</th>
                         </tr>
                     </thead>
@@ -106,12 +107,7 @@ def admin_master_dashboard():
                             <td><code>{{ data.password }}</code></td>
                             <td><span style="color: #38bdf8; font-weight:bold;">{{ data.expiry_date }}</span></td>
                             <td><span class="badge">{{ data.max_connections }} جهاز</span></td>
-                            <td>{{ data.allowed_device }}</td>
                             <td><span style="color: var(--success); font-weight: bold;">{{ data.status }}</span></td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" style="text-align: center; color: #94a3b8; padding: 25px;">لا توجد حسابات عملاء مسجلة حالياً. أضفهم في قاموس SUBSCRIBERS_DB داخل الكود!</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -131,14 +127,13 @@ def xtream_player_api_proxy():
     username = request.args.get('username')
     password = request.args.get('password')
     action = request.args.get('action')
-    client_device = request.headers.get('User-Agent', 'Unknown Device')
     
-    # 1. التحقق الأمني من صلاحية العميل وبيانات اعتماده
+    # 1. التحقق الأمني من العميل
     client = SUBSCRIBERS_DB.get(username)
     if not client or client['password'] != password or client.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
-    # 2. بروكسي العمليات والأقسام وقوائم القنوات والأفلام لتطبيق الـ IPTV
+    # 2. بروكسي العمليات والأقسام وقوائم القنوات لتطبيق الـ IPTV
     if action and UPSTREAM_SOURCES:
         try:
             target_source = UPSTREAM_SOURCES[0]
@@ -162,8 +157,7 @@ def xtream_player_api_proxy():
             "exp_date": "1893456000",
             "is_trial": "0",
             "active_cons": "1",
-            "max_connections": str(client['max_connections']),
-            "active_device_tracked": client_device
+            "max_connections": str(client['max_connections'])
         },
         "server_info": {
             "url": request.host_url.rstrip('/').replace('https://', 'http://'),
@@ -175,7 +169,7 @@ def xtream_player_api_proxy():
     return jsonify(response_payload)
 
 # ==============================================================================
-# 5. محرك توجيه البث الذكي والمتقدم (القنوات المباشرة Live، الأفلام Movie، المسلسلات Series)
+# 5. محرك توجيه البث الذكي (القنوات، الأفلام، المسلسلات)
 # ==============================================================================
 @app.route('/live/<username>/<password>/<path:stream_path>')
 @app.route('/movie/<username>/<password>/<path:stream_path>')
@@ -198,7 +192,7 @@ def proxy_stream_dispatcher(username, password, stream_path):
         return f"Proxy Critical Stream Error: {str(e)}", 500
 
 # ==============================================================================
-# 6. مسارات فحص الصحة لضمان استقرار السيرفر ومنع خطأ 502 على SnapDeploy
+# 6. مسارات فحص الصحة لمنع خطأ 502 على SnapDeploy
 # ==============================================================================
 @app.route('/health')
 @app.route('/actuator/health')
