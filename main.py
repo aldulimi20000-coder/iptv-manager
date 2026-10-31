@@ -1,13 +1,9 @@
 import os
 import json
-import time
 import logging
-import requests
-from flask import Flask, Response, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, redirect
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("IPTV_CORE")
-
 app = Flask(__name__)
 
 SOURCES_FILE = "sources.json"
@@ -23,7 +19,6 @@ def init_storage():
                 "12345": {
                     "password": "12345",
                     "expiry_date": "2026-12-31",
-                    "max_connections": 5,
                     "status": "Active"
                 }
             }, f, ensure_ascii=False, indent=4)
@@ -43,8 +38,8 @@ def save_json(filename, data):
     try:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        logger.error(f"Save error: {e}")
+    except Exception:
+        pass
 
 @app.route('/', methods=['GET', 'POST'])
 def web_control_panel():
@@ -58,7 +53,7 @@ def web_control_panel():
             u = request.form.get('username', '').strip()
             p = request.form.get('password', '').strip()
             if u and p:
-                subs[u] = {"password": p, "expiry_date": "2026-12-31", "max_connections": 5, "status": "Active"}
+                subs[u] = {"password": p, "expiry_date": "2026-12-31", "status": "Active"}
                 save_json(SUBS_FILE, subs)
                 message = f"تم إضافة المشترك ({u}) بنجاح!"
         elif form_type == 'add_source':
@@ -77,7 +72,7 @@ def web_control_panel():
     <html lang="ar" dir="rtl">
     <head>
         <meta charset="UTF-8">
-        <title>لوحة تحكم السيرفر</title>
+        <title>لوحة تحكم السيرفر النهائي</title>
         <style>
             body {{ background: #030712; color: #f8fafc; font-family: Tahoma; padding: 20px; }}
             .card {{ background: #0f172a; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #1e293b; }}
@@ -89,8 +84,8 @@ def web_control_panel():
     <body>
         <div style="max-width: 800px; margin: auto;">
             <div class="card" style="text-align: center;">
-                <h2>⚡ لوحة التحكم الخاصة بك</h2>
-                <p>رابط السيرفر (URL) لاستخدامه في التطبيق:</p>
+                <h2>⚡ لوحة التحكم النهائية</h2>
+                <p>رابط السيرفر (URL) الخاص بك:</p>
                 <code>{current_url}</code>
             </div>
             {f'<div style="background:#065f46; padding:10px; border-radius:6px; margin-bottom:15px; text-align:center;">{message}</div>' if message else ''}
@@ -104,13 +99,13 @@ def web_control_panel():
                 </form>
             </div>
             <div class="card">
-                <h3>🌐 إضافة مصدر Xtream أصلي</h3>
+                <h3>🌐 إعادة توجيه مباشر للمصدر الأصلي</h3>
                 <form method="POST">
                     <input type="hidden" name="form_type" value="add_source">
-                    <input type="text" name="dns" placeholder="رابط المصدر (http://marveltv.info:80)" required>
-                    <input type="text" name="s_username" placeholder="اسم مستخدم المصدر" required>
-                    <input type="text" name="s_password" placeholder="كلمة مرور المصدر" required>
-                    <button type="submit">حفظ المصدر</button>
+                    <input type="text" name="dns" placeholder="رابط المصدر الكامل (مثل: http://marveltv.info:80/get.php?...)" required>
+                    <input type="text" name="s_username" placeholder="ملاحظة أو اسم" value="MainSource" required>
+                    <input type="text" name="s_password" placeholder="كلمة المرور" value="123" required>
+                    <button type="submit">حفظ التوجيه</button>
                 </form>
             </div>
         </div>
@@ -123,57 +118,21 @@ def web_control_panel():
 def xtream_gateway():
     usr = request.args.get('username')
     pwd = request.args.get('password')
-    act = request.args.get('action')
-    
     subs = load_json(SUBS_FILE)
+    
     if usr not in subs or subs[usr].get('password') != pwd:
         return jsonify({"user_info": {"auth": 0}}), 401
 
     sources = load_json(SOURCES_FILE)
-    if not sources:
-        return jsonify([])
+    if sources:
+        target = sources[0]['dns']
+        if "://" in target:
+            return redirect(target, code=302)
 
-    src = sources[0]  # استخدام المصدر الأول المضاف
-    upstream = f"{src['dns']}/player_api.php?username={src['username']}&password={src['password']}"
-    if act:
-        upstream += f"&action={act}"
-        for k, v in request.args.items():
-            if k not in ['username', 'password', 'action']:
-                upstream += f"&{k}={v}"
-
-    try:
-        resp = requests.get(upstream, timeout=10)
-        if resp.headers.get('content-type', '').startswith('application/json'):
-            return jsonify(resp.json())
-        return resp.text, resp.status_code
-    except Exception:
-        return jsonify([])
-
-@app.route('/live/<usr>/<pwd>/<path:subpath>')
-@app.route('/movie/<usr>/<pwd>/<path:subpath>')
-@app.route('/series/<usr>/<pwd>/<path:subpath>')
-def stream_proxy(usr, pwd, subpath):
-    subs = load_json(SUBS_FILE)
-    if usr not in subs or subs[usr].get('password') != pwd:
-        return "Unauthorized", 401
-
-    sources = load_json(SOURCES_FILE)
-    if not sources:
-        return "No Sources", 503
-
-    src = sources[0]
-    category = request.path.split('/')[1]
-    target_url = f"{src['dns']}/{category}/{src['username']}/{src['password']}/{subpath}"
-
-    try:
-        req = requests.get(target_url, stream=True, timeout=20)
-        def generate():
-            for chunk in req.iter_content(chunk_size=16384):
-                if chunk:
-                    yield chunk
-        return Response(generate(), status=req.status_code, content_type=req.headers.get('content-type', 'video/mp2t'))
-    except Exception as e:
-        return f"Error: {e}", 502
+    return jsonify({
+        "user_info": {"username": usr, "status": "Active", "max_connections": "5"},
+        "server_info": {"url": request.host_url.rstrip('/'), "port": "80"}
+    })
 
 @app.route('/health')
 def health():
