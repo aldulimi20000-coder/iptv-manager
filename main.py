@@ -10,15 +10,15 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (PORT_FIX) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (SAFE_FIX) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_PORT_FIX")
+logger = logging.getLogger("IPTV_SAFE_FIX")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_port_fix_2026")
-TIMEOUT_LIMIT = 20
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_safe_2026")
+TIMEOUT_LIMIT = 15
 CACHE_TTL = 300
 cache_lock = threading.Lock()
 
@@ -105,7 +105,7 @@ def evaluate_single_upstream(node_info):
         usr = node_info.get('username', '')
         pwd = node_info.get('password', '')
         health_check_url = f"{dns}/player_api.php?username={usr}&password={pwd}"
-        response = requests.get(health_check_url, timeout=3.5)
+        response = requests.get(health_check_url, timeout=4)
         if response.status_code == 200:
             payload_data = response.json()
             if isinstance(payload_data, dict) and ("user_info" in payload_data or "server_info" in payload_data):
@@ -129,7 +129,7 @@ def fetch_and_filter_active():
     series_sum = 0
 
     if raw_list:
-        with ThreadPoolExecutor(max_workers=45) as thread_pool:
+        with ThreadPoolExecutor(max_workers=20) as thread_pool:
             eval_results = thread_pool.map(evaluate_single_upstream, raw_list)
         for idx, res_node in enumerate(eval_results, 1):
             if res_node:
@@ -355,7 +355,7 @@ def xtream_web_gateway():
     
     subscribers_db = load_subs_json()
     subscriber_profile = subscribers_db.get(usr)
-    if not subscriber_profile or subscriber_profile.get('password'] != pwd or subscriber_profile.get('status') != "Active":
+    if not subscriber_profile or subscriber_profile.get('password') != pwd or subscriber_profile.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
     valid_sources = fetch_and_filter_active()
@@ -440,11 +440,14 @@ def web_stream_proxy(usr, pwd, stream_subpath):
         destination_url = f"{selected_target_source['dns']}/{media_category}/{selected_target_source['username']}/{selected_target_source['password']}/{unpacked_stream_path}"
         
         try:
-            upstream_req = requests.get(destination_url, stream=True, timeout=30)
+            upstream_req = requests.get(destination_url, stream=True, timeout=25)
             def generate():
-                for chunk in upstream_req.iter_content(chunk_size=16384):
-                    if chunk:
-                        yield chunk
+                try:
+                    for chunk in upstream_req.iter_content(chunk_size=8192):
+                        if chunk:
+                            yield chunk
+                except Exception:
+                    pass
             return Response(
                 generate(),
                 status=upstream_req.status_code,
