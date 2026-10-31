@@ -10,15 +10,15 @@ from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] (ULTIMATE_FIX) >>> %(message)s',
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] (STREAM_FIX) >>> %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger("IPTV_ULTIMATE_FIX")
+logger = logging.getLogger("IPTV_STREAM_FIX")
 
 app = Flask(__name__)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_ultimate_fix_2026")
-TIMEOUT_LIMIT = 8
+SECRET_KEY = os.environ.get("SECRET_KEY", "bashar_stream_fix_2026")
+TIMEOUT_LIMIT = 15
 CACHE_TTL = 300
 cache_lock = threading.Lock()
 
@@ -205,7 +205,7 @@ def web_control_panel():
                         _WEB_CACHE["last_updated"] = 0
                     message = "تم إضافة مصدر الـ Xtream وحفظه في السيرفر بنجاح!"
                 else:
-                    message = "خطأ: يجب ملء جميع حقول المصدر (الرابط، اسم المستخدم، كلمة المرور)!"
+                    message = "خطأ: يجب ملء جميع حقول المصدر!"
 
             elif form_type == 'delete_source':
                 try:
@@ -258,7 +258,7 @@ def web_control_panel():
         <div class="container">
             <header>
                 <h1>⚡ لوحة التحكم بالكامل عبر الويب - IPTV Web Master</h1>
-                <p>إدارة المشتركين، إضافة المصادر، ودمج القنوات والأفلام والمسلسلات بنجاح</p>
+                <p>إدارة المشتركين، إضافة المصادر، وتشغيل البث المباشر والأفلام بنجاح تام</p>
             </header>
             
             <div class="url-box">
@@ -295,7 +295,7 @@ def web_control_panel():
                     <form method="POST">
                         <input type="hidden" name="form_type" value="add_source">
                         <input type="text" name="dns" placeholder="رابط السيرفر (http://marveltv.info:80)" required>
-                        <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر (مثل 3663930117)" required>
+                        <input type="text" name="s_username" placeholder="اسم المستخدم للمصدر" required>
                         <input type="text" name="s_password" placeholder="كلمة المرور للمصدر" required>
                         <button type="submit">حفظ المصدر وتحديث السيرفر</button>
                     </form>
@@ -355,7 +355,7 @@ def xtream_web_gateway():
     
     subscribers_db = load_subs_json()
     subscriber_profile = subscribers_db.get(usr)
-    if not subscriber_profile or subscriber_profile.get('password') != pwd or subscriber_profile.get('status') != "Active":
+    if not subscriber_profile or subscriber_profile.get('password'] != pwd or subscriber_profile.get('status') != "Active":
         return jsonify({"user_info": {"auth": 0, "status": "Unauthorized or Expired"}}), 401
         
     valid_sources = fetch_and_filter_active()
@@ -410,10 +410,11 @@ def xtream_web_gateway():
     }
     return jsonify(login_response_packet)
 
+# توجيه وتشغيل البث المباشر والأفلام والمسلسلات مع تمرير البث بسلاسة تامة
 @app.route('/live/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/movie/<usr>/<pwd>/<path:stream_subpath>')
 @app.route('/series/<usr>/<pwd>/<path:stream_subpath>')
-def web_stream_redirection(usr, pwd, stream_subpath):
+def web_stream_proxy(usr, pwd, stream_subpath):
     subscribers_db = load_subs_json()
     subscriber_profile = subscribers_db.get(usr)
     if not subscriber_profile or subscriber_profile.get('password') != pwd:
@@ -438,7 +439,17 @@ def web_stream_redirection(usr, pwd, stream_subpath):
     if selected_target_source:
         media_category = request.path.split('/')[1]
         destination_url = f"{selected_target_source['dns']}/{media_category}/{selected_target_source['username']}/{selected_target_source['password']}/{unpacked_stream_path}"
-        return redirect(destination_url, code=302)
+        
+        # استخدام وكيل تمرير مباشر (Streaming Proxy) لمنع الشاشة السوداء وضمان تشغيل البث
+        try:
+            upstream_req = requests.get(destination_url, stream=True, timeout=20)
+            return Response(
+                upstream_req.iter_content(chunk_size=32768),
+                status=upstream_req.status_code,
+                content_type=upstream_req.headers.get('content-type', 'video/mp2t')
+            )
+        except Exception as e:
+            return f"Stream Error: {str(e)}", 502
         
     return "No Active Upstream Sources Available", 503
 
